@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_shell.dart';
+
 class NotarisApp extends StatelessWidget {
   const NotarisApp({super.key});
 
@@ -9,7 +11,7 @@ class NotarisApp extends StatelessWidget {
       title: 'Notaris Apps',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true),
-      home: const Scaffold(body: Center(child: Text('Notaris Apps'))),
+      home: const AppShell(),
     );
   }
 }
