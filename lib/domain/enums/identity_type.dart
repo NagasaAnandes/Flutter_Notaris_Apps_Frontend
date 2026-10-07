@@ -1,0 +1,1 @@
+enum IdentityType { nik, passport }

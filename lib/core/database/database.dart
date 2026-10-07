@@ -11,10 +11,9 @@ class AppDatabase {
   AppDatabase({
     DatabaseFactory? databaseFactory,
     MigrationRunner? migrationRunner,
-    String? databasePath,
+    this._databasePath,
   }) : _databaseFactory = databaseFactory ?? databaseFactoryFfi,
-       _migrationRunner = migrationRunner ?? const MigrationRunner(),
-       _databasePath = databasePath;
+       _migrationRunner = migrationRunner ?? const MigrationRunner();
 
   final DatabaseFactory _databaseFactory;
   final MigrationRunner _migrationRunner;
@@ -44,6 +43,7 @@ class AppDatabase {
       options: OpenDatabaseOptions(
         version: DatabaseConfig.databaseVersion,
         onConfigure: _onConfigure,
+        onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
     );
@@ -61,6 +61,10 @@ class AppDatabase {
 
   Future<void> _onConfigure(Database database) async {
     await database.execute('PRAGMA foreign_keys = ON');
+  }
+
+  Future<void> _onCreate(Database database, int version) async {
+    await _migrationRunner.migrate(database, 0, version);
   }
 
   Future<void> _onUpgrade(

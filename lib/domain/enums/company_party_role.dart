@@ -1,0 +1,1 @@
+enum CompanyPartyRole { director, commissioner }

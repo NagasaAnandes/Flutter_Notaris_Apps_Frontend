@@ -1,12 +1,13 @@
 name: flutter_notaris_apps_frontend
 description: "A new Flutter project."
-publish_to: 'none'
+publish_to: "none"
 version: 0.1.0+1
 
 environment:
   sdk: ^3.13.4
 
 dependencies:
+  csv: ^8.0.0
   flutter:
     sdk: flutter
   flutter_bloc: ^9.1.1
@@ -22,3 +23,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/data/kbli/
