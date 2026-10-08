@@ -10,6 +10,8 @@ import 'package:flutter_notaris_apps_frontend/domain/enums/identity_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/client_address.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/address_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/filters/client_filter.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
 
 void main() {
   late AppDatabase appDatabase;
@@ -26,8 +28,15 @@ void main() {
     );
 
     final dataSource = ClientLocalDataSourceImpl(appDatabase);
+    final revisionDataSource = ClientRevisionLocalDataSourceImpl(appDatabase);
+    final auditLogDataSource = AuditLogLocalDataSourceImpl(appDatabase);
 
-    repository = ClientRepositoryImpl(dataSource);
+    repository = ClientRepositoryImpl(
+      appDatabase,
+      dataSource,
+      revisionDataSource,
+      auditLogDataSource,
+    );
   });
 
   tearDown(() async {

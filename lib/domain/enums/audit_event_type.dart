@@ -6,4 +6,5 @@ enum AuditEventType {
   documentRevised,
   documentApproved,
   documentFinalized,
+  clientUpdated,
 }

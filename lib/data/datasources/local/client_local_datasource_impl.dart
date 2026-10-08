@@ -1,4 +1,4 @@
-// import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common/sqlite_api.dart';
 
 import 'package:flutter_notaris_apps_frontend/domain/filters/client_filter.dart';
 
@@ -11,8 +11,11 @@ class ClientLocalDataSourceImpl implements ClientLocalDataSource {
   const ClientLocalDataSourceImpl(this._appDatabase);
 
   @override
-  Future<Map<String, dynamic>?> getById(String id) async {
-    final database = await _appDatabase.database;
+  Future<Map<String, dynamic>?> getById(
+    String id, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     final result = await database.query(
       'clients',
@@ -93,15 +96,22 @@ class ClientLocalDataSourceImpl implements ClientLocalDataSource {
   }
 
   @override
-  Future<void> update(String id, Map<String, dynamic> data) async {
-    final database = await _appDatabase.database;
+  Future<void> update(
+    String id,
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     await database.update('clients', data, where: 'id = ?', whereArgs: [id]);
   }
 
   @override
-  Future<List<Map<String, dynamic>>> getAddresses(String clientId) async {
-    final database = await _appDatabase.database;
+  Future<List<Map<String, dynamic>>> getAddresses(
+    String clientId, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     return database.query(
       'client_addresses',
@@ -112,15 +122,22 @@ class ClientLocalDataSourceImpl implements ClientLocalDataSource {
   }
 
   @override
-  Future<void> insertAddress(Map<String, dynamic> data) async {
-    final database = await _appDatabase.database;
+  Future<void> insertAddress(
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     await database.insert('client_addresses', data);
   }
 
   @override
-  Future<void> updateAddress(String id, Map<String, dynamic> data) async {
-    final database = await _appDatabase.database;
+  Future<void> updateAddress(
+    String id,
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     await database.update(
       'client_addresses',
@@ -131,8 +148,8 @@ class ClientLocalDataSourceImpl implements ClientLocalDataSource {
   }
 
   @override
-  Future<void> deleteAddress(String id) async {
-    final database = await _appDatabase.database;
+  Future<void> deleteAddress(String id, {DatabaseExecutor? executor}) async {
+    final database = executor ?? await _appDatabase.database;
 
     await database.delete('client_addresses', where: 'id = ?', whereArgs: [id]);
   }

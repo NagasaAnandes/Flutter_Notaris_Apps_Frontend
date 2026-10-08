@@ -1,3 +1,5 @@
+import 'package:sqflite_common/sqlite_api.dart';
+
 import '../../../core/database/database.dart';
 import 'audit_log_local_datasource.dart';
 
@@ -7,8 +9,11 @@ class AuditLogLocalDataSourceImpl implements AuditLogLocalDataSource {
   const AuditLogLocalDataSourceImpl(this._database);
 
   @override
-  Future<void> insert(Map<String, dynamic> data) async {
-    final database = await _database.database;
+  Future<void> insert(
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _database.database;
 
     await database.insert('audit_logs', data);
   }

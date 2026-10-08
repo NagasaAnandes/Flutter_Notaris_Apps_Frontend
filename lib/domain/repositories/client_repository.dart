@@ -1,5 +1,7 @@
 import '../entities/client.dart';
 import '../entities/client_address.dart';
+import '../entities/client_revision.dart';
+import '../entities/client_revision_address.dart';
 import '../filters/client_filter.dart';
 
 abstract interface class ClientRepository {
@@ -11,7 +13,10 @@ abstract interface class ClientRepository {
 
   Future<void> create(Client client);
 
-  Future<void> update(Client client);
+  Future<void> updateClient({
+    required Client client,
+    required List<ClientAddress> addresses,
+  });
 
   Future<List<ClientAddress>> getAddresses(String clientId);
 
@@ -20,4 +25,8 @@ abstract interface class ClientRepository {
   Future<void> updateAddress(ClientAddress address);
 
   Future<void> removeAddress(String addressId);
+
+  Future<List<ClientRevision>> getRevisions(String clientId);
+
+  Future<List<ClientRevisionAddress>> getRevisionAddresses(String revisionId);
 }

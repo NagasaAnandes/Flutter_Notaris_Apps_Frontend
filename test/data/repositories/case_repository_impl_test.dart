@@ -21,6 +21,8 @@ import 'package:flutter_notaris_apps_frontend/domain/enums/case_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/gender.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/identity_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/party_type.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
 
 void main() {
   late AppDatabase appDatabase;
@@ -49,7 +51,10 @@ void main() {
     );
 
     clientRepository = ClientRepositoryImpl(
+      appDatabase,
       ClientLocalDataSourceImpl(appDatabase),
+      ClientRevisionLocalDataSourceImpl(appDatabase),
+      AuditLogLocalDataSourceImpl(appDatabase),
     );
 
     partyRepository = PartyRepositoryImpl(
