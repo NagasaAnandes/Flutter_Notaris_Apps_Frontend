@@ -1,5 +1,7 @@
 // import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:flutter_notaris_apps_frontend/domain/filters/client_filter.dart';
+
 import '../../../core/database/database.dart';
 import 'client_local_datasource.dart';
 
@@ -34,25 +36,51 @@ class ClientLocalDataSourceImpl implements ClientLocalDataSource {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> search(String query) async {
+  Future<List<Map<String, dynamic>>> search({
+    required String query,
+    ClientFilter? filter,
+  }) async {
     final database = await _appDatabase.database;
 
-    final normalizedQuery = '%${query.trim()}%';
+    final conditions = <String>[];
+    final whereArgs = <dynamic>[];
 
-    return database.query(
-      'clients',
-      where: '''
+    final normalizedQuery = query.trim();
+
+    if (normalizedQuery.isNotEmpty) {
+      final searchQuery = '%$normalizedQuery%';
+
+      conditions.add('''
+      (
         name LIKE ?
         OR identity_number LIKE ?
         OR phone LIKE ?
         OR email LIKE ?
-      ''',
-      whereArgs: [
-        normalizedQuery,
-        normalizedQuery,
-        normalizedQuery,
-        normalizedQuery,
-      ],
+      )
+    ''');
+
+      whereArgs.addAll([searchQuery, searchQuery, searchQuery, searchQuery]);
+    }
+
+    if (filter?.nationalityCode != null) {
+      conditions.add('nationality_code = ?');
+      whereArgs.add(filter!.nationalityCode);
+    }
+
+    if (filter?.identityType != null) {
+      conditions.add('identity_type = ?');
+      whereArgs.add(filter!.identityType);
+    }
+
+    if (filter?.gender != null) {
+      conditions.add('gender = ?');
+      whereArgs.add(filter!.gender);
+    }
+
+    return database.query(
+      'clients',
+      where: conditions.isEmpty ? null : conditions.join(' AND '),
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
       orderBy: 'name ASC',
     );
   }

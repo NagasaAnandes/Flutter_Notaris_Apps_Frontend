@@ -52,9 +52,9 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
     return database.query(
       'cases',
       where: '''
-        title LIKE ?
-        OR description LIKE ?
-      ''',
+          title LIKE ?
+          OR description LIKE ?
+        ''',
       whereArgs: [normalizedQuery, normalizedQuery],
       orderBy: 'created_at DESC',
     );

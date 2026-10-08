@@ -85,4 +85,10 @@ class AppDatabase {
     await database.close();
     _database = null;
   }
+
+  Future<T> transaction<T>(Future<T> Function(Transaction txn) action) async {
+    final database = await this.database;
+
+    return database.transaction(action);
+  }
 }

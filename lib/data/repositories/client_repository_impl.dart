@@ -4,6 +4,7 @@ import '../../domain/repositories/client_repository.dart';
 import '../datasources/local/client_local_datasource.dart';
 import '../models/client_address_model.dart';
 import '../models/client_model.dart';
+import '../../domain/filters/client_filter.dart';
 
 class ClientRepositoryImpl implements ClientRepository {
   final ClientLocalDataSource _dataSource;
@@ -32,13 +33,13 @@ class ClientRepositoryImpl implements ClientRepository {
   }
 
   @override
-  Future<List<Client>> search(String query) async {
-    final data = await _dataSource.search(query);
+  Future<List<Client>> search({
+    required String query,
+    ClientFilter? filter,
+  }) async {
+    final data = await _dataSource.search(query: query, filter: filter);
 
-    return data
-        .map(ClientModel.fromMap)
-        .map((model) => model.toEntity())
-        .toList();
+    return data.map((item) => ClientModel.fromMap(item).toEntity()).toList();
   }
 
   @override
