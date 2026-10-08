@@ -54,6 +54,8 @@ void main() {
       containsAll(<String>[
         'clients',
         'client_addresses',
+        'client_revisions',
+        'client_revision_addresses',
         'cases',
         'case_parties',
         'case_kbli',
@@ -73,14 +75,256 @@ void main() {
       ]),
     );
 
-    expect(tableNames, hasLength(18));
+    expect(tableNames, hasLength(20));
   });
 
-  test('database version is 3 after migration', () async {
+  test('database version is 4 after migration', () async {
     final database = await appDatabase.database;
 
     expect(await database.getVersion(), DatabaseConfig.databaseVersion);
   });
+
+  test('client history v4 tables have expected schema', () async {
+    final database = await appDatabase.database;
+
+    final revisionColumns = await database.rawQuery(
+      'PRAGMA table_info(client_revisions)',
+    );
+
+    final revisionColumnNames = revisionColumns
+        .map((row) => row['name'] as String)
+        .toSet();
+
+    expect(
+      revisionColumnNames,
+      containsAll(<String>[
+        'id',
+        'client_id',
+        'revision_number',
+        'name',
+        'nationality_code',
+        'identity_type',
+        'identity_number',
+        'birth_date',
+        'gender',
+        'phone',
+        'email',
+        'notes',
+        'created_at',
+      ]),
+    );
+
+    final revisionAddressColumns = await database.rawQuery(
+      'PRAGMA table_info(client_revision_addresses)',
+    );
+
+    final revisionAddressColumnNames = revisionAddressColumns
+        .map((row) => row['name'] as String)
+        .toSet();
+
+    expect(
+      revisionAddressColumnNames,
+      containsAll(<String>[
+        'id',
+        'revision_id',
+        'address_id',
+        'address_type',
+        'country_code',
+        'province_id',
+        'regency_id',
+        'district_id',
+        'village_id',
+        'foreign_state',
+        'foreign_city',
+        'postal_code',
+        'address_detail',
+        'created_at',
+      ]),
+    );
+  });
+
+  test(
+    'client identity is unique by identity type and identity number',
+    () async {
+      final database = await appDatabase.database;
+
+      final firstClient = <String, Object?>{
+        'id': 'client-identity-test-001',
+        'name': 'Identity Test Client 1',
+        'nationality_code': 'ID',
+        'identity_type': 'nik',
+        'identity_number': '1234567890123456',
+        'birth_date': null,
+        'gender': null,
+        'phone': null,
+        'email': null,
+        'notes': null,
+        'created_at': '2026-01-01T10:00:00.000',
+        'updated_at': '2026-01-01T10:00:00.000',
+      };
+
+      await database.insert('clients', firstClient);
+
+      // Same identity number with a different identity type is allowed.
+      await database.insert('clients', {
+        ...firstClient,
+        'id': 'client-identity-test-002',
+        'identity_type': 'passport',
+      });
+
+      // Same identity type + identity number must be rejected.
+      expect(
+        () => database.insert('clients', {
+          ...firstClient,
+          'id': 'client-identity-test-003',
+        }),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test('client revision constraints are enforced', () async {
+    final database = await appDatabase.database;
+
+    await database.insert('clients', {
+      'id': 'client-revision-test-001',
+      'name': 'Revision Test Client',
+      'nationality_code': 'ID',
+      'identity_type': 'nik',
+      'identity_number': '9876543210123456',
+      'birth_date': null,
+      'gender': null,
+      'phone': null,
+      'email': null,
+      'notes': null,
+      'created_at': '2026-01-01T10:00:00.000',
+      'updated_at': '2026-01-01T10:00:00.000',
+    });
+
+    await database.insert('client_revisions', {
+      'id': 'revision-test-001',
+      'client_id': 'client-revision-test-001',
+      'revision_number': 1,
+      'name': 'Revision Test Client',
+      'nationality_code': 'ID',
+      'identity_type': 'nik',
+      'identity_number': '9876543210123456',
+      'birth_date': null,
+      'gender': null,
+      'phone': null,
+      'email': null,
+      'notes': null,
+      'created_at': '2026-01-01T10:00:00.000',
+    });
+
+    // Same client + revision number must be rejected.
+    expect(
+      () => database.insert('client_revisions', {
+        'id': 'revision-test-002',
+        'client_id': 'client-revision-test-001',
+        'revision_number': 1,
+        'name': 'Revision Test Client',
+        'nationality_code': 'ID',
+        'identity_type': 'nik',
+        'identity_number': '9876543210123456',
+        'birth_date': null,
+        'gender': null,
+        'phone': null,
+        'email': null,
+        'notes': null,
+        'created_at': '2026-01-01T11:00:00.000',
+      }),
+      throwsA(isA<Exception>()),
+    );
+
+    // Invalid revision_id must be rejected.
+    expect(
+      () => database.insert('client_revision_addresses', {
+        'id': 'revision-address-test-001',
+        'revision_id': 'revision-does-not-exist',
+        'address_id': 'address-001',
+        'address_type': 'domicile',
+        'country_code': 'ID',
+        'province_id': null,
+        'regency_id': null,
+        'district_id': null,
+        'village_id': null,
+        'foreign_state': null,
+        'foreign_city': null,
+        'postal_code': null,
+        'address_detail': 'Test address',
+        'created_at': '2026-01-01T10:00:00.000',
+      }),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test(
+    'client revision address can reference a historical address id',
+    () async {
+      final database = await appDatabase.database;
+
+      await database.insert('clients', {
+        'id': 'client-revision-address-test-001',
+        'name': 'Revision Address Test Client',
+        'nationality_code': 'ID',
+        'identity_type': 'nik',
+        'identity_number': '1111222233334444',
+        'birth_date': null,
+        'gender': null,
+        'phone': null,
+        'email': null,
+        'notes': null,
+        'created_at': '2026-01-01T10:00:00.000',
+        'updated_at': '2026-01-01T10:00:00.000',
+      });
+
+      await database.insert('client_revisions', {
+        'id': 'revision-address-test-001',
+        'client_id': 'client-revision-address-test-001',
+        'revision_number': 1,
+        'name': 'Revision Address Test Client',
+        'nationality_code': 'ID',
+        'identity_type': 'nik',
+        'identity_number': '1111222233334444',
+        'birth_date': null,
+        'gender': null,
+        'phone': null,
+        'email': null,
+        'notes': null,
+        'created_at': '2026-01-01T10:00:00.000',
+      });
+
+      await database.insert('client_revision_addresses', {
+        'id': 'revision-address-test-002',
+        'revision_id': 'revision-address-test-001',
+        'address_id': 'historical-address-that-no-longer-exists',
+        'address_type': 'domicile',
+        'country_code': 'ID',
+        'province_id': null,
+        'regency_id': null,
+        'district_id': null,
+        'village_id': null,
+        'foreign_state': null,
+        'foreign_city': null,
+        'postal_code': null,
+        'address_detail': 'Historical address',
+        'created_at': '2026-01-01T10:00:00.000',
+      });
+
+      final rows = await database.query(
+        'client_revision_addresses',
+        where: 'id = ?',
+        whereArgs: ['revision-address-test-002'],
+      );
+
+      expect(rows, hasLength(1));
+      expect(
+        rows.single['address_id'],
+        'historical-address-that-no-longer-exists',
+      );
+    },
+  );
 
   test('foreign key enforcement is enabled', () async {
     final database = await appDatabase.database;
@@ -477,4 +721,157 @@ void main() {
       await upgradedDatabase.close();
     },
   );
+
+  test(
+    'database upgrade from v3 to v4 preserves existing client data',
+    () async {
+      final migrationRunner = const MigrationRunner();
+
+      final v3Database = await databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 3,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onCreate: (database, version) async {
+            await migrationRunner.migrate(database, 0, version);
+          },
+        ),
+      );
+
+      await v3Database.insert('clients', {
+        'id': 'client-migration-v4-001',
+        'name': 'V4 Migration Test Client',
+        'nationality_code': 'ID',
+        'identity_type': 'nik',
+        'identity_number': '5555666677778888',
+        'birth_date': '1990-01-01',
+        'gender': 'male',
+        'phone': '081234567890',
+        'email': 'migration-v4@test.com',
+        'notes': 'Existing client before v4 migration',
+        'created_at': '2026-01-01T10:00:00.000',
+        'updated_at': '2026-01-01T10:00:00.000',
+      });
+
+      await v3Database.close();
+
+      final upgradedDatabase = await databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 4,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onUpgrade: (database, oldVersion, newVersion) async {
+            await migrationRunner.migrate(database, oldVersion, newVersion);
+          },
+        ),
+      );
+
+      expect(await upgradedDatabase.getVersion(), 4);
+
+      final clients = await upgradedDatabase.query(
+        'clients',
+        where: 'id = ?',
+        whereArgs: ['client-migration-v4-001'],
+      );
+
+      expect(clients, hasLength(1));
+
+      final client = clients.single;
+
+      expect(client['name'], 'V4 Migration Test Client');
+      expect(client['nationality_code'], 'ID');
+      expect(client['identity_type'], 'nik');
+      expect(client['identity_number'], '5555666677778888');
+      expect(client['birth_date'], '1990-01-01');
+      expect(client['gender'], 'male');
+      expect(client['phone'], '081234567890');
+      expect(client['email'], 'migration-v4@test.com');
+      expect(client['notes'], 'Existing client before v4 migration');
+
+      final tables = await upgradedDatabase.rawQuery('''
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'table'
+      AND name NOT LIKE 'sqlite_%'
+  ''');
+
+      final tableNames = tables.map((row) => row['name'] as String).toSet();
+
+      expect(tableNames, contains('client_revisions'));
+      expect(tableNames, contains('client_revision_addresses'));
+
+      await upgradedDatabase.close();
+    },
+  );
+
+  test('database upgrade from v3 to v4 fails when duplicate client identities exist', () async {
+    final migrationRunner = const MigrationRunner();
+
+    final v3Database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 3,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (database, version) async {
+          await migrationRunner.migrate(database, 0, version);
+        },
+      ),
+    );
+
+    const duplicateIdentity = '9999888877776666';
+
+    await v3Database.insert('clients', {
+      'id': 'client-duplicate-v4-001',
+      'name': 'Duplicate Identity Client 1',
+      'nationality_code': 'ID',
+      'identity_type': 'nik',
+      'identity_number': duplicateIdentity,
+      'birth_date': null,
+      'gender': null,
+      'phone': null,
+      'email': null,
+      'notes': null,
+      'created_at': '2026-01-01T10:00:00.000',
+      'updated_at': '2026-01-01T10:00:00.000',
+    });
+
+    await v3Database.insert('clients', {
+      'id': 'client-duplicate-v4-002',
+      'name': 'Duplicate Identity Client 2',
+      'nationality_code': 'ID',
+      'identity_type': 'nik',
+      'identity_number': duplicateIdentity,
+      'birth_date': null,
+      'gender': null,
+      'phone': null,
+      'email': null,
+      'notes': null,
+      'created_at': '2026-01-01T11:00:00.000',
+      'updated_at': '2026-01-01T11:00:00.000',
+    });
+
+    await v3Database.close();
+
+    expect(
+      () => databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 4,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onUpgrade: (database, oldVersion, newVersion) async {
+            await migrationRunner.migrate(database, oldVersion, newVersion);
+          },
+        ),
+      ),
+      throwsA(isA<Exception>()),
+    );
+  });
 }

@@ -8,20 +8,26 @@ class MigrationRunner {
     int oldVersion,
     int newVersion,
   ) async {
-    if (oldVersion < 1) {
-      await _createInitialSchema(database);
-    }
+    await database.transaction((txn) async {
+      if (oldVersion < 1) {
+        await _createInitialSchema(txn);
+      }
 
-    if (oldVersion < 2 && newVersion >= 2) {
-      await _createKbliV2Schema(database);
-    }
+      if (oldVersion < 2 && newVersion >= 2) {
+        await _createKbliV2Schema(txn);
+      }
 
-    if (oldVersion < 3 && newVersion >= 3) {
-      await _createKbliV3Schema(database);
-    }
+      if (oldVersion < 3 && newVersion >= 3) {
+        await _createKbliV3Schema(txn);
+      }
+
+      if (oldVersion < 4 && newVersion >= 4) {
+        await _createClientV4Schema(txn);
+      }
+    });
   }
 
-  Future<void> _createInitialSchema(Database database) async {
+  Future<void> _createInitialSchema(DatabaseExecutor database) async {
     await database.execute('''
       CREATE TABLE clients (
         id TEXT PRIMARY KEY,
@@ -349,7 +355,7 @@ class MigrationRunner {
     ''');
   }
 
-  Future<void> _createKbliV2Schema(Database database) async {
+  Future<void> _createKbliV2Schema(DatabaseExecutor database) async {
     await database.execute('''
     CREATE TABLE kbli_2020 (
       id TEXT PRIMARY KEY,
@@ -446,7 +452,7 @@ class MigrationRunner {
   ''');
   }
 
-  Future<void> _createKbliV3Schema(Database database) async {
+  Future<void> _createKbliV3Schema(DatabaseExecutor database) async {
     await database.execute('''
     CREATE TABLE kbli_2025_new (
       id TEXT PRIMARY KEY,
@@ -507,5 +513,65 @@ class MigrationRunner {
     await database.execute(
       'CREATE INDEX idx_kbli_2025_id_kategori ON kbli_2025(id_kategori)',
     );
+  }
+
+  Future<void> _createClientV4Schema(DatabaseExecutor database) async {
+    await database.execute('''
+    CREATE UNIQUE INDEX idx_clients_identity
+    ON clients (identity_type, identity_number)
+  ''');
+
+    await database.execute('''
+    CREATE TABLE client_revisions (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      revision_number INTEGER NOT NULL,
+
+      name TEXT NOT NULL,
+      nationality_code TEXT NOT NULL,
+      identity_type TEXT NOT NULL,
+      identity_number TEXT NOT NULL,
+      birth_date TEXT,
+      gender TEXT,
+      phone TEXT,
+      email TEXT,
+      notes TEXT,
+
+      created_at TEXT NOT NULL,
+
+      UNIQUE (client_id, revision_number),
+
+      FOREIGN KEY (client_id)
+        REFERENCES clients (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+    )
+  ''');
+
+    await database.execute('''
+    CREATE TABLE client_revision_addresses (
+      id TEXT PRIMARY KEY,
+      revision_id TEXT NOT NULL,
+      address_id TEXT NOT NULL,
+
+      address_type TEXT NOT NULL,
+      country_code TEXT NOT NULL,
+      province_id TEXT,
+      regency_id TEXT,
+      district_id TEXT,
+      village_id TEXT,
+      foreign_state TEXT,
+      foreign_city TEXT,
+      postal_code TEXT,
+      address_detail TEXT NOT NULL,
+
+      created_at TEXT NOT NULL,
+
+      FOREIGN KEY (revision_id)
+        REFERENCES client_revisions (id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+    )
+  ''');
   }
 }

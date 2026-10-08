@@ -3,5 +3,5 @@ class DatabaseConfig {
 
   static const String databaseFileName = 'notaris.db';
 
-  static const int databaseVersion = 3;
+  static const int databaseVersion = 4;
 }
