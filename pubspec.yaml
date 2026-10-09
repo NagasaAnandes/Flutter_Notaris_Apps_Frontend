@@ -7,14 +7,17 @@ environment:
   sdk: ^3.13.4
 
 dependencies:
+  bloc_test: ^10.0.0
   csv: ^8.0.0
   flutter:
     sdk: flutter
   flutter_bloc: ^9.1.1
+  mocktail: ^1.0.5
   path: ^1.9.1
   path_provider: ^2.1.6
   sqflite_common: ^2.5.13
   sqflite_common_ffi: ^2.4.3
+  uuid: ^4.6.0
 
 dev_dependencies:
   flutter_test:

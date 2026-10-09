@@ -13,6 +13,11 @@ abstract interface class ClientRepository {
 
   Future<void> create(Client client);
 
+  Future<void> createClient({
+    required Client client,
+    required List<ClientAddress> addresses,
+  });
+
   Future<void> updateClient({
     required Client client,
     required List<ClientAddress> addresses,

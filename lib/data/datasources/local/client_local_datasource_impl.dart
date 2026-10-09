@@ -89,8 +89,11 @@ class ClientLocalDataSourceImpl implements ClientLocalDataSource {
   }
 
   @override
-  Future<void> insert(Map<String, dynamic> data) async {
-    final database = await _appDatabase.database;
+  Future<void> insert(
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     await database.insert('clients', data);
   }

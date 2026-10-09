@@ -72,6 +72,35 @@ class ClientRepositoryImpl implements ClientRepository {
   }
 
   @override
+  Future<void> createClient({
+    required Client client,
+    required List<ClientAddress> addresses,
+  }) async {
+    for (final address in addresses) {
+      if (address.clientId != client.id) {
+        throw StateError(
+          'Address ${address.id} does not belong to client ${client.id}.',
+        );
+      }
+    }
+
+    await _appDatabase.transaction((transaction) async {
+      final clientModel = ClientModel.fromEntity(client);
+
+      await _dataSource.insert(clientModel.toMap(), executor: transaction);
+
+      for (final address in addresses) {
+        final addressModel = ClientAddressModel.fromEntity(address);
+
+        await _dataSource.insertAddress(
+          addressModel.toMap(),
+          executor: transaction,
+        );
+      }
+    });
+  }
+
+  @override
   Future<void> updateClient({
     required Client client,
     required List<ClientAddress> addresses,

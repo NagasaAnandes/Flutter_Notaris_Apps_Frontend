@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_notaris_apps_frontend/app/app_dependencies.dart';
 
 import 'app/app.dart';
 import 'app/startup_error_app.dart';
@@ -19,7 +20,7 @@ Future<void> main() async {
   try {
     await databaseInitializer.initialize();
 
-    runApp(const NotarisApp());
+    runApp(NotarisApp(dependencies: AppDependencies(appDatabase)));
   } catch (error, stackTrace) {
     runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
   }

@@ -15,7 +15,7 @@ abstract interface class ClientLocalDataSource {
     ClientFilter? filter,
   });
 
-  Future<void> insert(Map<String, dynamic> data);
+  Future<void> insert(Map<String, dynamic> data, {DatabaseExecutor? executor});
 
   Future<void> update(
     String id,
