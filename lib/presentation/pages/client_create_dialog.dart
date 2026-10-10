@@ -134,28 +134,39 @@ class _ClientCreateDialogState extends State<ClientCreateDialog> {
           previous.operationSuccess != current.operationSuccess ||
           previous.operationError != current.operationError,
       listener: (context, state) {
+        debugPrint(
+          'ClientCreateDialog listener: '
+          'operationError=${state.operationError}, '
+          'operationSuccess=${state.operationSuccess}',
+        );
+
         if (state.operationError != null) {
           final errorMessage = state.operationError!;
 
-          showDialog<void>(
-            context: context,
-            barrierDismissible: false,
-            builder: (dialogContext) => AlertDialog(
-              icon: const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 36,
-              ),
-              title: const Text('Gagal Menyimpan Client'),
-              content: Text(errorMessage),
-              actions: [
-                FilledButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Oke'),
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+
+            showDialog<void>(
+              context: context,
+              useRootNavigator: false,
+              barrierDismissible: false,
+              builder: (dialogContext) => AlertDialog(
+                icon: const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 36,
                 ),
-              ],
-            ),
-          );
+                title: const Text('Gagal Menyimpan Client'),
+                content: Text(errorMessage),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Oke'),
+                  ),
+                ],
+              ),
+            );
+          });
         }
 
         if (state.operationSuccess != null) {
