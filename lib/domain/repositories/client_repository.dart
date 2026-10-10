@@ -29,7 +29,10 @@ abstract interface class ClientRepository {
 
   Future<void> updateAddress(ClientAddress address);
 
-  Future<void> removeAddress(String addressId);
+  Future<void> removeAddress({
+    required String clientId,
+    required String addressId,
+  });
 
   Future<List<ClientRevision>> getRevisions(String clientId);
 

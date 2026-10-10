@@ -199,6 +199,7 @@ class ClientRepositoryImpl implements ClientRepository {
       for (final currentAddress in currentAddresses) {
         if (!incomingAddressById.containsKey(currentAddress.id)) {
           await _dataSource.deleteAddress(
+            client.id,
             currentAddress.id,
             executor: transaction,
           );
@@ -210,6 +211,7 @@ class ClientRepositoryImpl implements ClientRepository {
 
         if (currentAddressById.containsKey(address.id)) {
           await _dataSource.updateAddress(
+            client.id,
             address.id,
             addressModel.toMap(),
             executor: transaction,
@@ -262,12 +264,19 @@ class ClientRepositoryImpl implements ClientRepository {
   Future<void> updateAddress(ClientAddress address) async {
     final model = ClientAddressModel.fromEntity(address);
 
-    await _dataSource.updateAddress(address.id, model.toMap());
+    await _dataSource.updateAddress(
+      address.clientId,
+      address.id,
+      model.toMap(),
+    );
   }
 
   @override
-  Future<void> removeAddress(String addressId) async {
-    await _dataSource.deleteAddress(addressId);
+  Future<void> removeAddress({
+    required String clientId,
+    required String addressId,
+  }) async {
+    await _dataSource.deleteAddress(clientId, addressId);
   }
 
   @override

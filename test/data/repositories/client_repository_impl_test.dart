@@ -390,4 +390,143 @@ void main() {
       containsAll([firstClient.id, secondClient.id]),
     );
   });
+
+  test(
+    'updateAddress does not modify an address owned by another client',
+    () async {
+      final now = DateTime(2026, 10, 9, 10, 0);
+
+      final clientA = Client(
+        id: 'client-negative-001',
+        name: 'Client A',
+        nationalityCode: 'ID',
+        identityType: IdentityType.nik,
+        identityNumber: '3170000000000101',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final clientB = Client(
+        id: 'client-negative-002',
+        name: 'Client B',
+        nationalityCode: 'ID',
+        identityType: IdentityType.nik,
+        identityNumber: '3170000000000102',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await repository.create(clientA);
+      await repository.create(clientB);
+
+      final addressB = ClientAddress(
+        id: 'address-negative-002',
+        clientId: clientB.id,
+        addressType: AddressType.domicile,
+        countryCode: 'ID',
+        provinceId: '31',
+        regencyId: '3171',
+        districtId: '3171010',
+        villageId: '3171010001',
+        postalCode: '10110',
+        addressDetail: 'Alamat asli Client B',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await repository.addAddress(addressB);
+
+      // Simulasikan objek alamat yang ID-nya milik Client B,
+      // tetapi clientId-nya diubah menjadi Client A.
+      final forgedAddress = ClientAddress(
+        id: addressB.id,
+        clientId: clientA.id,
+        addressType: addressB.addressType,
+        countryCode: addressB.countryCode,
+        provinceId: addressB.provinceId,
+        regencyId: addressB.regencyId,
+        districtId: addressB.districtId,
+        villageId: addressB.villageId,
+        postalCode: addressB.postalCode,
+        addressDetail: 'Alamat yang tidak seharusnya diterapkan',
+        createdAt: addressB.createdAt,
+        updatedAt: now,
+      );
+
+      await expectLater(
+        repository.updateAddress(forgedAddress),
+        throwsA(anything),
+      );
+
+      final addressesB = await repository.getAddresses(clientB.id);
+
+      expect(addressesB, hasLength(1));
+      expect(addressesB.first.id, addressB.id);
+      expect(addressesB.first.clientId, clientB.id);
+      expect(addressesB.first.addressDetail, 'Alamat asli Client B');
+    },
+  );
+
+  test(
+    'removeAddress does not delete an address owned by another client',
+    () async {
+      final now = DateTime(2026, 10, 9, 10, 0);
+
+      final clientA = Client(
+        id: 'client-remove-negative-001',
+        name: 'Client A',
+        nationalityCode: 'ID',
+        identityType: IdentityType.nik,
+        identityNumber: '3170000000000201',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final clientB = Client(
+        id: 'client-remove-negative-002',
+        name: 'Client B',
+        nationalityCode: 'ID',
+        identityType: IdentityType.nik,
+        identityNumber: '3170000000000202',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await repository.create(clientA);
+      await repository.create(clientB);
+
+      final addressB = ClientAddress(
+        id: 'address-remove-negative-002',
+        clientId: clientB.id,
+        addressType: AddressType.domicile,
+        countryCode: 'ID',
+        provinceId: '31',
+        regencyId: '3171',
+        districtId: '3171010',
+        villageId: '3171010001',
+        postalCode: '10110',
+        addressDetail: 'Alamat Client B',
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      await repository.addAddress(addressB);
+
+      // API menerima addressId saja, sehingga kita menguji
+      // apakah alamat dapat dihapus tanpa validasi pemilik.
+      await expectLater(
+        repository.removeAddress(clientId: clientA.id, addressId: addressB.id),
+        throwsA(isA<StateError>()),
+      );
+      final addressesB = await repository.getAddresses(clientB.id);
+
+      expect(
+        addressesB,
+        isNotEmpty,
+        reason: 'Alamat Client B tidak boleh terhapus tanpa validasi pemilik.',
+      );
+      expect(addressesB.first.id, addressB.id);
+      expect(addressesB.first.addressDetail, 'Alamat Client B');
+    },
+  );
 }

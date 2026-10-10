@@ -136,24 +136,41 @@ class ClientLocalDataSourceImpl implements ClientLocalDataSource {
 
   @override
   Future<void> updateAddress(
+    String clientId,
     String id,
     Map<String, dynamic> data, {
     DatabaseExecutor? executor,
   }) async {
     final database = executor ?? await _appDatabase.database;
 
-    await database.update(
+    final affectedRows = await database.update(
       'client_addresses',
       data,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'id = ? AND client_id = ?',
+      whereArgs: [id, clientId],
     );
+
+    if (affectedRows != 1) {
+      throw StateError('Alamat tidak ditemukan untuk Client yang ditentukan.');
+    }
   }
 
   @override
-  Future<void> deleteAddress(String id, {DatabaseExecutor? executor}) async {
+  Future<void> deleteAddress(
+    String clientId,
+    String id, {
+    DatabaseExecutor? executor,
+  }) async {
     final database = executor ?? await _appDatabase.database;
 
-    await database.delete('client_addresses', where: 'id = ?', whereArgs: [id]);
+    final affectedRows = await database.delete(
+      'client_addresses',
+      where: 'id = ? AND client_id = ?',
+      whereArgs: [id, clientId],
+    );
+
+    if (affectedRows != 1) {
+      throw StateError('Alamat tidak ditemukan untuk Client yang ditentukan.');
+    }
   }
 }

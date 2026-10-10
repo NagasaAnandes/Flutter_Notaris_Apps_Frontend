@@ -34,10 +34,15 @@ abstract interface class ClientLocalDataSource {
   });
 
   Future<void> updateAddress(
+    String clientId,
     String id,
     Map<String, dynamic> data, {
     DatabaseExecutor? executor,
   });
 
-  Future<void> deleteAddress(String id, {DatabaseExecutor? executor});
+  Future<void> deleteAddress(
+    String clientId,
+    String id, {
+    DatabaseExecutor? executor,
+  });
 }
