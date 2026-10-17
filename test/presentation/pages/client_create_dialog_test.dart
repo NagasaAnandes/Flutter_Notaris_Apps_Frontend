@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:flutter/foundation.dart';
 
 import 'package:flutter_notaris_apps_frontend/domain/repositories/client_detail_repository.dart';
 import 'package:flutter_notaris_apps_frontend/domain/repositories/client_repository.dart';
@@ -116,56 +115,35 @@ void main() {
 
       await tester.tap(find.text('Simpan'));
 
-      // Proses event submit dan perubahan state BLoC.
-      await tester.pump();
-      await tester.pump();
-
-      // Beri waktu untuk transisi pembukaan dialog error.
-      await tester.pump(const Duration(milliseconds: 300));
+      // BLoC handler berjalan melalui Dart async mechanism (stream transformer).
+      // Di dalam FakeAsync (flutter_test), stream subscription callbacks dari BLoC
+      // tidak diproses oleh pump() biasa. runAsync() menjalankan event di luar
+      // FakeAsync sehingga stream benar-benar diproses dan BlocBuilder dapat rebuild.
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
       await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
-
-      debugPrint(
-        'Navigator route: ${tester.state<NavigatorState>(find.byType(Navigator).first).widget}',
-      );
-      debugPrint(
-        'AlertDialog count: ${find.byType(AlertDialog).evaluate().length}',
-      );
-      debugPrint(
-        'Error title count: ${find.text('Gagal Menyimpan Client').evaluate().length}',
-      );
-
       expect(bloc.state.isSubmitting, isFalse);
       expect(bloc.state.operationError, isNotNull);
 
-      debugPrint(
-        'Jumlah AlertDialog: '
-        '${find.byType(AlertDialog).evaluate().length}',
+      // Pesan error inline harus tampil di dalam form 'Tambah Client'.
+      expect(
+        find.byKey(const Key('client-create-operation-error')),
+        findsOneWidget,
       );
-
-      debugPrint(
-        'Judul dialog error ditemukan: '
-        '${find.text('Gagal Menyimpan Client').evaluate().length}',
-      );
-
-      expect(bloc.state.isSubmitting, isFalse);
-      expect(bloc.state.operationError, isNotNull);
-
-      // Error dipetakan oleh ClientBloc menjadi pesan umum operasi gagal.
-      expect(find.text('Gagal Menyimpan Client'), findsOneWidget);
       expect(
         find.text('Operasi Client gagal. Silakan periksa data dan coba lagi.'),
         findsOneWidget,
       );
 
-      // Dialog form masih terbuka di belakang dialog error.
+      // Dialog form 'Tambah Client' masih terbuka (tidak ditutup setelah error).
       expect(find.text('Tambah Client'), findsOneWidget);
 
-      await tester.tap(find.text('Oke'));
-      await tester.pumpAndSettle();
+      // Tombol Simpan kembali tersedia setelah error (isSubmitting = false).
+      expect(find.text('Simpan'), findsOneWidget);
 
-      expect(find.text('Tambah Client'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     },
   );
 }
