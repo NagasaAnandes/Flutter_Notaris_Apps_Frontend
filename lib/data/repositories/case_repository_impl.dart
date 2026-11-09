@@ -1,6 +1,7 @@
 import '../../domain/entities/case_kbli.dart';
 import '../../domain/entities/case_party.dart';
 import '../../domain/entities/notary_case.dart';
+import '../../domain/enums/case_status.dart';
 import '../../domain/repositories/case_repository.dart';
 import '../datasources/local/case_kbli_local_datasource.dart';
 import '../datasources/local/case_local_datasource.dart';
@@ -76,8 +77,25 @@ class CaseRepositoryImpl implements CaseRepository {
   }
 
   @override
-  Future<void> updateStatus(String caseId, String status) async {
-    await _caseDataSource.updateStatus(caseId, status);
+  Future<void> updateStatus(String caseId, CaseStatus status) async {
+    final existingCase = await getById(caseId);
+
+    if (existingCase == null) {
+      throw StateError(
+        'Cannot update status. Case with ID $caseId was not found.',
+      );
+    }
+
+    final currentStatus = existingCase.status;
+
+    if (!currentStatus.canTransitionTo(status)) {
+      throw StateError(
+        'Invalid Case status transition: '
+        '${currentStatus.code} -> ${status.code}.',
+      );
+    }
+
+    await _caseDataSource.updateStatus(caseId, status.code);
   }
 
   @override

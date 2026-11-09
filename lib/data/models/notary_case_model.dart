@@ -7,7 +7,7 @@ class NotaryCaseModel {
   final String clientId;
   final String? companyId;
   final String type;
-  final String status;
+  final CaseStatus status;
   final String title;
   final String? description;
   final String? openedAt;
@@ -29,13 +29,14 @@ class NotaryCaseModel {
     required this.updatedAt,
   });
 
+  /// Creates a model from a SQLite map.
   factory NotaryCaseModel.fromMap(Map<String, dynamic> map) {
     return NotaryCaseModel(
       id: map['id'] as String,
       clientId: map['client_id'] as String,
       companyId: map['company_id'] as String?,
       type: map['type'] as String,
-      status: map['status'] as String,
+      status: CaseStatus.fromCode(map['status'] as String),
       title: map['title'] as String,
       description: map['description'] as String?,
       openedAt: map['opened_at'] as String?,
@@ -45,13 +46,14 @@ class NotaryCaseModel {
     );
   }
 
+  /// Creates a model from a domain entity.
   factory NotaryCaseModel.fromEntity(NotaryCase entity) {
     return NotaryCaseModel(
       id: entity.id,
       clientId: entity.clientId,
       companyId: entity.companyId,
       type: entity.type.name,
-      status: entity.status.name,
+      status: entity.status,
       title: entity.title,
       description: entity.description,
       openedAt: entity.openedAt?.toIso8601String(),
@@ -61,13 +63,14 @@ class NotaryCaseModel {
     );
   }
 
+  /// Converts this model into a domain entity.
   NotaryCase toEntity() {
     return NotaryCase(
       id: id,
       clientId: clientId,
       companyId: companyId,
       type: CaseType.values.byName(type),
-      status: CaseStatus.values.byName(status),
+      status: status,
       title: title,
       description: description,
       openedAt: openedAt == null ? null : DateTime.parse(openedAt!),
@@ -77,13 +80,14 @@ class NotaryCaseModel {
     );
   }
 
+  /// Converts this model into a SQLite map.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'client_id': clientId,
       'company_id': companyId,
       'type': type,
-      'status': status,
+      'status': status.code,
       'title': title,
       'description': description,
       'opened_at': openedAt,

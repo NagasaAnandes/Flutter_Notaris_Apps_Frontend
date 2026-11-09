@@ -112,7 +112,7 @@ void main() {
         id: 'case-detail-001',
         clientId: client.id,
         type: CaseType.incorporation,
-        status: CaseStatus.inProgress,
+        status: CaseStatus.draft,
         title: 'Pendirian PT Detail',
         description: 'Case untuk test Client Detail.',
         openedAt: DateTime(2026, 10, 8, 10),

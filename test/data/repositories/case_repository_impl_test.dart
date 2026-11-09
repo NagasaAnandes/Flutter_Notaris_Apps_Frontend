@@ -141,7 +141,7 @@ void main() {
       id: 'case-003',
       clientId: 'client-002',
       type: CaseType.incorporation,
-      status: CaseStatus.inProgress,
+      status: CaseStatus.draft,
       title: 'Pendirian PT Beta',
       openedAt: DateTime(2026, 1, 4),
       createdAt: DateTime(2026, 1, 4),
@@ -312,11 +312,11 @@ void main() {
 
     await repository.create(caseData);
 
-    await repository.updateStatus('case-006', CaseStatus.inProgress.name);
+    await repository.updateStatus('case-006', CaseStatus.dataComplete);
 
     final result = await repository.getById('case-006');
 
     expect(result, isNotNull);
-    expect(result!.status, CaseStatus.inProgress);
+    expect(result!.status, CaseStatus.dataComplete);
   });
 }

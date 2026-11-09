@@ -1,6 +1,7 @@
 import '../entities/case_kbli.dart';
 import '../entities/case_party.dart';
 import '../entities/notary_case.dart';
+import '../enums/case_status.dart';
 
 abstract interface class CaseRepository {
   Future<NotaryCase?> getById(String id);
@@ -15,7 +16,11 @@ abstract interface class CaseRepository {
 
   Future<void> update(NotaryCase caseData);
 
-  Future<void> updateStatus(String caseId, String status);
+  /// Updates the status of an existing Case.
+  ///
+  /// The implementation must validate the status transition
+  /// before persisting the new status.
+  Future<void> updateStatus(String caseId, CaseStatus status);
 
   Future<List<CaseParty>> getParties(String caseId);
 

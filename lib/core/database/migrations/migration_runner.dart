@@ -24,6 +24,10 @@ class MigrationRunner {
       if (oldVersion < 4 && newVersion >= 4) {
         await _createClientV4Schema(txn);
       }
+
+      if (oldVersion < 5 && newVersion >= 5) {
+        await _migrateCaseStatusV5(txn);
+      }
     });
   }
 
@@ -573,5 +577,29 @@ class MigrationRunner {
         ON UPDATE CASCADE
     )
   ''');
+  }
+
+  /// Migrates legacy Case status enum names into stable database codes.
+  ///
+  /// Legacy values:
+  /// draft       -> DRAFT
+  /// inProgress  -> DRAFT
+  /// review      -> IN_REVIEW
+  /// finalized   -> FINAL
+  /// closed      -> ARCHIVED
+  /// cancelled   -> CANCELLED
+  Future<void> _migrateCaseStatusV5(DatabaseExecutor database) async {
+    await database.execute('''
+      UPDATE cases
+      SET status = CASE status
+        WHEN 'draft' THEN 'DRAFT'
+        WHEN 'inProgress' THEN 'DRAFT'
+        WHEN 'review' THEN 'IN_REVIEW'
+        WHEN 'finalized' THEN 'FINAL'
+        WHEN 'closed' THEN 'ARCHIVED'
+        WHEN 'cancelled' THEN 'CANCELLED'
+        ELSE status
+      END
+    ''');
   }
 }

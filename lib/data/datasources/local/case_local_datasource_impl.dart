@@ -52,9 +52,9 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
     return database.query(
       'cases',
       where: '''
-          title LIKE ?
-          OR description LIKE ?
-        ''',
+        title LIKE ?
+        OR description LIKE ?
+      ''',
       whereArgs: [normalizedQuery, normalizedQuery],
       orderBy: 'created_at DESC',
     );
@@ -71,18 +71,36 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
   Future<void> update(String id, Map<String, dynamic> data) async {
     final database = await _appDatabase.database;
 
-    await database.update('cases', data, where: 'id = ?', whereArgs: [id]);
+    final updatedData = {
+      ...data,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    final affectedRows = await database.update(
+      'cases',
+      updatedData,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (affectedRows == 0) {
+      throw StateError('Case with ID $id was not found.');
+    }
   }
 
   @override
   Future<void> updateStatus(String caseId, String status) async {
     final database = await _appDatabase.database;
 
-    await database.update(
+    final affectedRows = await database.update(
       'cases',
-      {'status': status},
+      {'status': status, 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [caseId],
     );
+
+    if (affectedRows == 0) {
+      throw StateError('Case with ID $caseId was not found.');
+    }
   }
 }

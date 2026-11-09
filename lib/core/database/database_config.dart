@@ -3,5 +3,8 @@ class DatabaseConfig {
 
   static const String databaseFileName = 'notaris.db';
 
-  static const int databaseVersion = 4;
+  /// Current SQLite schema version.
+  ///
+  /// Version 5 introduces the standardized Case status codes.
+  static const int databaseVersion = 5;
 }

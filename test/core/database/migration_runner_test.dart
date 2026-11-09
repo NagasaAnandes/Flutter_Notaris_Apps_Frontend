@@ -78,7 +78,7 @@ void main() {
     expect(tableNames, hasLength(20));
   });
 
-  test('database version is 4 after migration', () async {
+  test('database version is 5 after migration', () async {
     final database = await appDatabase.database;
 
     expect(await database.getVersion(), DatabaseConfig.databaseVersion);
@@ -874,4 +874,99 @@ void main() {
       throwsA(isA<Exception>()),
     );
   });
+
+  test(
+    'database upgrade from v4 to v5 migrates legacy case statuses',
+    () async {
+      final migrationRunner = const MigrationRunner();
+
+      final v4Database = await databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 4,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onCreate: (database, version) async {
+            await migrationRunner.migrate(database, 0, version);
+          },
+        ),
+      );
+
+      await v4Database.insert('clients', {
+        'id': 'client-migration-v5-001',
+        'name': 'V5 Migration Test Client',
+        'nationality_code': 'ID',
+        'identity_type': 'nik',
+        'identity_number': '1234567890123456',
+        'birth_date': null,
+        'gender': null,
+        'phone': null,
+        'email': null,
+        'notes': null,
+        'created_at': '2026-01-01T10:00:00.000',
+        'updated_at': '2026-01-01T10:00:00.000',
+      });
+
+      final legacyStatuses = <String>[
+        'draft',
+        'inProgress',
+        'review',
+        'finalized',
+        'closed',
+        'cancelled',
+      ];
+
+      for (var index = 0; index < legacyStatuses.length; index++) {
+        await v4Database.insert('cases', {
+          'id': 'case-migration-v5-${index + 1}',
+          'client_id': 'client-migration-v5-001',
+          'company_id': null,
+          'type': 'incorporation',
+          'status': legacyStatuses[index],
+          'title': 'Migration Test Case ${index + 1}',
+          'description': null,
+          'opened_at': null,
+          'closed_at': null,
+          'created_at': '2026-01-01T10:00:00.000',
+          'updated_at': '2026-01-01T10:00:00.000',
+        });
+      }
+
+      await v4Database.close();
+
+      final upgradedDatabase = await databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 5,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onUpgrade: (database, oldVersion, newVersion) async {
+            await migrationRunner.migrate(database, oldVersion, newVersion);
+          },
+        ),
+      );
+
+      expect(await upgradedDatabase.getVersion(), 5);
+
+      final migratedCases = await upgradedDatabase.query(
+        'cases',
+        columns: ['id', 'status'],
+        orderBy: 'id ASC',
+      );
+
+      expect(migratedCases, hasLength(6));
+      expect(migratedCases.map((row) => row['status']).toList(), <String>[
+        'DRAFT',
+        'DRAFT',
+        'IN_REVIEW',
+        'FINAL',
+        'ARCHIVED',
+        'CANCELLED',
+      ]);
+
+      await upgradedDatabase.close();
+    },
+  );
 }
