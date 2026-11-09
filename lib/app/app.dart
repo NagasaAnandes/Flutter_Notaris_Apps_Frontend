@@ -1,18 +1,38 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'app_dependencies.dart';
 import 'app_shell.dart';
+import '../presentation/bloc/case/case_bloc.dart';
+import '../presentation/bloc/client/client_bloc.dart';
 
-class NotarisApp extends StatelessWidget {
+class NotarisApp extends StatefulWidget {
   final AppDependencies dependencies;
 
   const NotarisApp({required this.dependencies, super.key});
 
   @override
+  State<NotarisApp> createState() => _NotarisAppState();
+}
+
+class _NotarisAppState extends State<NotarisApp> {
+  @override
+  void dispose() {
+    unawaited(widget.dependencies.dispose());
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: dependencies.clientBloc,
+    final dependencies = widget.dependencies;
+
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider<ClientBloc>.value(value: dependencies.clientBloc),
+        BlocProvider<CaseBloc>.value(value: dependencies.caseBloc),
+      ],
       child: MaterialApp(
         title: 'Notaris Apps',
         debugShowCheckedModeBanner: false,

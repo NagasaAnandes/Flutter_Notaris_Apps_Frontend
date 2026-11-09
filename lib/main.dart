@@ -22,6 +22,14 @@ Future<void> main() async {
 
     runApp(NotarisApp(dependencies: AppDependencies(appDatabase)));
   } catch (error, stackTrace) {
+    try {
+      await appDatabase.close();
+    } catch (closeError, closeStackTrace) {
+      debugPrint('Failed to close database during startup cleanup:');
+      debugPrint('$closeError');
+      debugPrintStack(stackTrace: closeStackTrace);
+    }
+
     runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
   }
 }
