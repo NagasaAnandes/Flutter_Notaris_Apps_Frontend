@@ -112,7 +112,7 @@ void main() {
         id: 'case-detail-001',
         clientId: client.id,
         type: CaseType.incorporation,
-        status: CaseStatus.draft,
+        status: CaseStatus.newCase,
         title: 'Pendirian PT Detail',
         description: 'Case untuk test Client Detail.',
         openedAt: DateTime(2026, 10, 8, 10),
@@ -121,6 +121,9 @@ void main() {
       );
 
       await caseRepository.create(caseData);
+
+      // Follow the Case lifecycle: NEW -> DRAFT.
+      await caseRepository.updateStatus(caseData.id, CaseStatus.draft);
 
       final document = Document(
         id: 'document-detail-001',

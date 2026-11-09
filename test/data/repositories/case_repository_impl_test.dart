@@ -88,7 +88,7 @@ void main() {
       clientId: 'client-001',
       companyId: null,
       type: CaseType.incorporation,
-      status: CaseStatus.draft,
+      status: CaseStatus.newCase,
       title: 'Pendirian PT Maju Bersama',
       description: 'Case pendirian perseroan terbatas.',
       openedAt: null,
@@ -106,7 +106,7 @@ void main() {
     expect(result.clientId, 'client-001');
     expect(result.companyId, isNull);
     expect(result.type, CaseType.incorporation);
-    expect(result.status, CaseStatus.draft);
+    expect(result.status, CaseStatus.newCase);
     expect(result.title, 'Pendirian PT Maju Bersama');
     expect(result.description, 'Case pendirian perseroan terbatas.');
     expect(result.openedAt, isNull);
@@ -130,7 +130,7 @@ void main() {
       id: 'case-002',
       clientId: 'client-002',
       type: CaseType.incorporation,
-      status: CaseStatus.draft,
+      status: CaseStatus.newCase,
       title: 'Pendirian PT Alpha',
       openedAt: DateTime(2026, 1, 3),
       createdAt: DateTime(2026, 1, 3),
@@ -141,7 +141,7 @@ void main() {
       id: 'case-003',
       clientId: 'client-002',
       type: CaseType.incorporation,
-      status: CaseStatus.draft,
+      status: CaseStatus.newCase,
       title: 'Pendirian PT Beta',
       openedAt: DateTime(2026, 1, 4),
       createdAt: DateTime(2026, 1, 4),
@@ -191,7 +191,7 @@ void main() {
       id: 'case-004',
       clientId: 'client-003',
       type: CaseType.incorporation,
-      status: CaseStatus.draft,
+      status: CaseStatus.newCase,
       title: 'Pendirian PT Gamma',
       createdAt: DateTime(2026, 1, 5),
       updatedAt: DateTime(2026, 1, 5),
@@ -255,7 +255,7 @@ void main() {
       id: 'case-005',
       clientId: 'client-004',
       type: CaseType.incorporation,
-      status: CaseStatus.draft,
+      status: CaseStatus.newCase,
       title: 'Pendirian PT Delta',
       createdAt: DateTime(2026, 1, 6),
       updatedAt: DateTime(2026, 1, 6),
@@ -304,7 +304,7 @@ void main() {
       id: 'case-006',
       clientId: 'client-005',
       type: CaseType.incorporation,
-      status: CaseStatus.draft,
+      status: CaseStatus.newCase,
       title: 'Pendirian PT Epsilon',
       createdAt: DateTime(2026, 1, 7),
       updatedAt: DateTime(2026, 1, 7),
@@ -312,11 +312,236 @@ void main() {
 
     await repository.create(caseData);
 
+    await repository.updateStatus('case-006', CaseStatus.draft);
     await repository.updateStatus('case-006', CaseStatus.dataComplete);
 
     final result = await repository.getById('case-006');
 
     expect(result, isNotNull);
     expect(result!.status, CaseStatus.dataComplete);
+  });
+
+  test('update case rejects status changes', () async {
+    final client = Client(
+      id: 'client-007',
+      name: 'Dewi Lestari',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000007',
+      createdAt: DateTime(2026, 1, 8),
+      updatedAt: DateTime(2026, 1, 8),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-007',
+      clientId: 'client-007',
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Pendirian PT Zeta',
+      createdAt: DateTime(2026, 1, 8),
+      updatedAt: DateTime(2026, 1, 8),
+    );
+
+    await repository.create(caseData);
+
+    final caseWithChangedStatus = NotaryCase(
+      id: caseData.id,
+      clientId: caseData.clientId,
+      companyId: caseData.companyId,
+      type: caseData.type,
+      status: CaseStatus.finalized,
+      title: caseData.title,
+      description: caseData.description,
+      openedAt: caseData.openedAt,
+      closedAt: caseData.closedAt,
+      createdAt: caseData.createdAt,
+      updatedAt: DateTime(2026, 1, 9),
+    );
+
+    await expectLater(
+      repository.update(caseWithChangedStatus),
+      throwsA(isA<StateError>()),
+    );
+
+    final result = await repository.getById('case-007');
+
+    expect(result, isNotNull);
+    expect(result!.status, CaseStatus.newCase);
+  });
+
+  test('update case data preserves its existing status', () async {
+    final client = Client(
+      id: 'client-008',
+      name: 'Fajar Nugraha',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000008',
+      createdAt: DateTime(2026, 1, 10),
+      updatedAt: DateTime(2026, 1, 10),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-008',
+      clientId: 'client-008',
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Pendirian PT Eta',
+      createdAt: DateTime(2026, 1, 10),
+      updatedAt: DateTime(2026, 1, 10),
+    );
+
+    await repository.create(caseData);
+
+    final updatedCase = NotaryCase(
+      id: caseData.id,
+      clientId: caseData.clientId,
+      companyId: caseData.companyId,
+      type: caseData.type,
+      status: caseData.status,
+      title: 'Pendirian PT Eta Baru',
+      description: caseData.description,
+      openedAt: caseData.openedAt,
+      closedAt: caseData.closedAt,
+      createdAt: caseData.createdAt,
+      updatedAt: DateTime(2026, 1, 11),
+    );
+
+    await repository.update(updatedCase);
+
+    final result = await repository.getById('case-008');
+
+    expect(result, isNotNull);
+    expect(result!.title, 'Pendirian PT Eta Baru');
+    expect(result.status, CaseStatus.newCase);
+  });
+
+  test('create case rejects a status other than NEW', () async {
+    final client = Client(
+      id: 'client-009',
+      name: 'Nadia Permata',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000009',
+      createdAt: DateTime(2026, 1, 12),
+      updatedAt: DateTime(2026, 1, 12),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-009',
+      clientId: 'client-009',
+      type: CaseType.incorporation,
+      status: CaseStatus.draft,
+      title: 'Pendirian PT Theta',
+      createdAt: DateTime(2026, 1, 12),
+      updatedAt: DateTime(2026, 1, 12),
+    );
+
+    await expectLater(repository.create(caseData), throwsA(isA<StateError>()));
+
+    final result = await repository.getById('case-009');
+
+    expect(result, isNull);
+  });
+
+  test('update status rejects an invalid transition', () async {
+    final client = Client(
+      id: 'client-b3-001',
+      name: 'Test Invalid Transition',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000101',
+      createdAt: DateTime(2026, 2, 1),
+      updatedAt: DateTime(2026, 2, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-b3-001',
+      clientId: 'client-b3-001',
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Test Invalid Transition',
+      createdAt: DateTime(2026, 2, 1),
+      updatedAt: DateTime(2026, 2, 1),
+    );
+
+    await repository.create(caseData);
+
+    await expectLater(
+      repository.updateStatus('case-b3-001', CaseStatus.finalized),
+      throwsA(isA<StateError>()),
+    );
+
+    final result = await repository.getById('case-b3-001');
+
+    expect(result, isNotNull);
+    expect(result!.status, CaseStatus.newCase);
+  });
+
+  test('update status rejects a missing case', () async {
+    await expectLater(
+      repository.updateStatus('case-b3-missing', CaseStatus.draft),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('conditional status update rejects a stale expected status', () async {
+    final client = Client(
+      id: 'client-b3-002',
+      name: 'Test Status Conflict',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000102',
+      createdAt: DateTime(2026, 2, 2),
+      updatedAt: DateTime(2026, 2, 2),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-b3-002',
+      clientId: 'client-b3-002',
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Test Status Conflict',
+      createdAt: DateTime(2026, 2, 2),
+      updatedAt: DateTime(2026, 2, 2),
+    );
+
+    await repository.create(caseData);
+
+    final database = await appDatabase.database;
+
+    // Simulate another process changing the status first.
+    await database.update(
+      'cases',
+      {'status': CaseStatus.draft.code},
+      where: 'id = ?',
+      whereArgs: ['case-b3-002'],
+    );
+
+    final caseDataSource = CaseLocalDataSourceImpl(appDatabase);
+
+    // This operation still expects NEW, so SQLite must reject it.
+    await expectLater(
+      caseDataSource.updateStatus(
+        'case-b3-002',
+        CaseStatus.newCase.code,
+        CaseStatus.draft.code,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    final result = await repository.getById('case-b3-002');
+
+    expect(result, isNotNull);
+    expect(result!.status, CaseStatus.draft);
   });
 }

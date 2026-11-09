@@ -11,5 +11,9 @@ abstract interface class CaseLocalDataSource {
 
   Future<void> update(String id, Map<String, dynamic> data);
 
-  Future<void> updateStatus(String caseId, String status);
+  Future<void> updateStatus(
+    String caseId,
+    String expectedStatus,
+    String newStatus,
+  );
 }

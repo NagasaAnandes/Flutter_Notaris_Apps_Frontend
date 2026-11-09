@@ -64,16 +64,44 @@ class CaseRepositoryImpl implements CaseRepository {
 
   @override
   Future<void> create(NotaryCase caseData) async {
-    final model = NotaryCaseModel.fromEntity(caseData);
+    if (caseData.status != CaseStatus.newCase) {
+      throw StateError(
+        'Cannot create Case with status ${caseData.status.code}. '
+        'A new Case must start with status ${CaseStatus.newCase.code}.',
+      );
+    }
 
+    final model = NotaryCaseModel.fromEntity(caseData);
     await _caseDataSource.insert(model.toMap());
   }
 
   @override
   Future<void> update(NotaryCase caseData) async {
-    final model = NotaryCaseModel.fromEntity(caseData);
+    final existingCase = await getById(caseData.id);
 
-    await _caseDataSource.update(caseData.id, model.toMap());
+    if (existingCase == null) {
+      throw StateError(
+        'Cannot update Case. '
+        'Case with ID ${caseData.id} was not found.',
+      );
+    }
+
+    if (existingCase.status != caseData.status) {
+      throw StateError(
+        'Cannot change Case status through update(). '
+        'Use updateStatus() instead. '
+        'Current status: ${existingCase.status.code}, '
+        'requested status: ${caseData.status.code}.',
+      );
+    }
+
+    final model = NotaryCaseModel.fromEntity(caseData);
+    final updateData = model.toMap();
+
+    // Status must only be changed through updateStatus().
+    updateData.remove('status');
+
+    await _caseDataSource.update(caseData.id, updateData);
   }
 
   @override
@@ -82,7 +110,8 @@ class CaseRepositoryImpl implements CaseRepository {
 
     if (existingCase == null) {
       throw StateError(
-        'Cannot update status. Case with ID $caseId was not found.',
+        'Cannot update status. '
+        'Case with ID $caseId was not found.',
       );
     }
 
@@ -95,7 +124,7 @@ class CaseRepositoryImpl implements CaseRepository {
       );
     }
 
-    await _caseDataSource.updateStatus(caseId, status.code);
+    await _caseDataSource.updateStatus(caseId, currentStatus.code, status.code);
   }
 
   @override

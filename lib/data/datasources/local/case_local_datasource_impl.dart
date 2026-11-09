@@ -89,18 +89,34 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
   }
 
   @override
-  Future<void> updateStatus(String caseId, String status) async {
+  Future<void> updateStatus(
+    String caseId,
+    String expectedStatus,
+    String newStatus,
+  ) async {
     final database = await _appDatabase.database;
 
     final affectedRows = await database.update(
       'cases',
-      {'status': status, 'updated_at': DateTime.now().toIso8601String()},
-      where: 'id = ?',
-      whereArgs: [caseId],
+      {'status': newStatus, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ? AND status = ?',
+      whereArgs: [caseId, expectedStatus],
     );
 
-    if (affectedRows == 0) {
+    if (affectedRows > 0) {
+      return;
+    }
+
+    final existingCase = await getById(caseId);
+
+    if (existingCase == null) {
       throw StateError('Case with ID $caseId was not found.');
     }
+
+    throw StateError(
+      'Case status conflict for ID $caseId. '
+      'Expected status: $expectedStatus, '
+      'actual status: ${existingCase['status']}.',
+    );
   }
 }
