@@ -21,6 +21,7 @@ import 'package:flutter_notaris_apps_frontend/domain/enums/case_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/gender.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/identity_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/party_type.dart';
+import 'package:flutter_notaris_apps_frontend/domain/filters/case_list_query.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
 
@@ -598,5 +599,566 @@ void main() {
     // Pastikan Client dan Case tetap tersimpan.
     expect(await clientRepository.getById(client.id), isNotNull);
     expect(await repository.getById(caseData.id), isNotNull);
+  });
+
+  test('get list returns cases with client name', () async {
+    final client = Client(
+      id: 'client-list-001',
+      name: 'Budi Santoso',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000201',
+      createdAt: DateTime(2026, 3, 1),
+      updatedAt: DateTime(2026, 3, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-list-001',
+      clientId: client.id,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Pendirian PT Maju Bersama',
+      description: 'Pendirian perusahaan teknologi.',
+      createdAt: DateTime(2026, 3, 2),
+      updatedAt: DateTime(2026, 3, 2),
+    );
+
+    await repository.create(caseData);
+
+    final results = await repository.getList(const CaseListQuery());
+
+    expect(results, hasLength(1));
+    expect(results.first.id, caseData.id);
+    expect(results.first.clientId, client.id);
+    expect(results.first.clientName, 'Budi Santoso');
+    expect(results.first.title, caseData.title);
+    expect(results.first.type, CaseType.incorporation);
+    expect(results.first.status, CaseStatus.newCase);
+  });
+
+  test(
+    'get list searches by case ID, title, description, and client name',
+    () async {
+      final client = Client(
+        id: 'client-list-002',
+        name: 'Siti Aminah',
+        nationalityCode: 'ID',
+        identityType: IdentityType.nik,
+        identityNumber: '3173000000000202',
+        createdAt: DateTime(2026, 3, 3),
+        updatedAt: DateTime(2026, 3, 3),
+      );
+
+      await clientRepository.create(client);
+
+      final caseData = NotaryCase(
+        id: 'case-list-search-001',
+        clientId: client.id,
+        type: CaseType.incorporation,
+        status: CaseStatus.newCase,
+        title: 'Pendirian PT Nusantara',
+        description: 'Perusahaan bergerak di bidang teknologi.',
+        createdAt: DateTime(2026, 3, 4),
+        updatedAt: DateTime(2026, 3, 4),
+      );
+
+      await repository.create(caseData);
+
+      final searchTerms = [
+        'case-list-search-001',
+        'Nusantara',
+        'bidang teknologi',
+        'Siti Aminah',
+      ];
+
+      for (final term in searchTerms) {
+        final results = await repository.getList(
+          CaseListQuery(searchQuery: term),
+        );
+
+        expect(
+          results.map((item) => item.id),
+          contains(caseData.id),
+          reason: 'Search should find Case using: $term',
+        );
+      }
+
+      final noResults = await repository.getList(
+        const CaseListQuery(searchQuery: 'data-tidak-ditemukan'),
+      );
+
+      expect(noResults, isEmpty);
+    },
+  );
+
+  test('get list filters cases by status', () async {
+    final client = Client(
+      id: 'client-filter-status',
+      name: 'Client Filter Status',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000301',
+      createdAt: DateTime(2026, 4, 1),
+      updatedAt: DateTime(2026, 4, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final newCase = NotaryCase(
+      id: 'case-filter-new',
+      clientId: client.id,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Case Status NEW',
+      createdAt: DateTime(2026, 4, 1),
+      updatedAt: DateTime(2026, 4, 1),
+    );
+
+    final draftCase = NotaryCase(
+      id: 'case-filter-draft',
+      clientId: client.id,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Case Status DRAFT',
+      createdAt: DateTime(2026, 4, 2),
+      updatedAt: DateTime(2026, 4, 2),
+    );
+
+    await repository.create(newCase);
+    await repository.create(draftCase);
+
+    await repository.updateStatus(draftCase.id, CaseStatus.draft);
+
+    final results = await repository.getList(
+      const CaseListQuery(statuses: [CaseStatus.draft]),
+    );
+
+    expect(results, hasLength(1));
+    expect(results.first.id, draftCase.id);
+    expect(results.first.status, CaseStatus.draft);
+  });
+
+  test('get list filters cases by type', () async {
+    final client = Client(
+      id: 'client-filter-type',
+      name: 'Client Filter Type',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000302',
+      createdAt: DateTime(2026, 4, 3),
+      updatedAt: DateTime(2026, 4, 3),
+    );
+
+    await clientRepository.create(client);
+
+    final incorporationCase = NotaryCase(
+      id: 'case-filter-incorporation',
+      clientId: client.id,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Case Pendirian PT',
+      createdAt: DateTime(2026, 4, 3),
+      updatedAt: DateTime(2026, 4, 3),
+    );
+
+    final amendmentCase = NotaryCase(
+      id: 'case-filter-amendment',
+      clientId: client.id,
+      type: CaseType.amendment,
+      status: CaseStatus.newCase,
+      title: 'Case Perubahan PT',
+      createdAt: DateTime(2026, 4, 4),
+      updatedAt: DateTime(2026, 4, 4),
+    );
+
+    await repository.create(incorporationCase);
+    await repository.create(amendmentCase);
+
+    final results = await repository.getList(
+      const CaseListQuery(types: [CaseType.amendment]),
+    );
+
+    expect(results, hasLength(1));
+    expect(results.first.id, amendmentCase.id);
+    expect(results.first.type, CaseType.amendment);
+  });
+
+  test('get list combines status and type filters', () async {
+    final client = Client(
+      id: 'client-filter-combined',
+      name: 'Client Filter Combined',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000303',
+      createdAt: DateTime(2026, 4, 5),
+      updatedAt: DateTime(2026, 4, 5),
+    );
+
+    await clientRepository.create(client);
+
+    final cases = [
+      NotaryCase(
+        id: 'case-combined-001',
+        clientId: client.id,
+        type: CaseType.incorporation,
+        status: CaseStatus.newCase,
+        title: 'Incorporation NEW',
+        createdAt: DateTime(2026, 4, 5),
+        updatedAt: DateTime(2026, 4, 5),
+      ),
+      NotaryCase(
+        id: 'case-combined-002',
+        clientId: client.id,
+        type: CaseType.amendment,
+        status: CaseStatus.newCase,
+        title: 'Amendment NEW',
+        createdAt: DateTime(2026, 4, 6),
+        updatedAt: DateTime(2026, 4, 6),
+      ),
+      NotaryCase(
+        id: 'case-combined-003',
+        clientId: client.id,
+        type: CaseType.amendment,
+        status: CaseStatus.newCase,
+        title: 'Amendment DRAFT',
+        createdAt: DateTime(2026, 4, 7),
+        updatedAt: DateTime(2026, 4, 7),
+      ),
+    ];
+
+    for (final caseData in cases) {
+      await repository.create(caseData);
+    }
+
+    await repository.updateStatus('case-combined-003', CaseStatus.draft);
+
+    final results = await repository.getList(
+      const CaseListQuery(
+        statuses: [CaseStatus.draft],
+        types: [CaseType.amendment],
+      ),
+    );
+
+    expect(results, hasLength(1));
+    expect(results.first.id, 'case-combined-003');
+    expect(results.first.status, CaseStatus.draft);
+    expect(results.first.type, CaseType.amendment);
+  });
+
+  test('get list combines search query with filters', () async {
+    final client = Client(
+      id: 'client-filter-search',
+      name: 'Client Filter Search',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000304',
+      createdAt: DateTime(2026, 4, 8),
+      updatedAt: DateTime(2026, 4, 8),
+    );
+
+    await clientRepository.create(client);
+
+    final targetCase = NotaryCase(
+      id: 'case-filter-search-001',
+      clientId: client.id,
+      type: CaseType.amendment,
+      status: CaseStatus.newCase,
+      title: 'Perubahan Anggaran Dasar',
+      createdAt: DateTime(2026, 4, 8),
+      updatedAt: DateTime(2026, 4, 8),
+    );
+
+    final otherCase = NotaryCase(
+      id: 'case-filter-search-002',
+      clientId: client.id,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Pendirian PT Anggaran',
+      createdAt: DateTime(2026, 4, 9),
+      updatedAt: DateTime(2026, 4, 9),
+    );
+
+    await repository.create(targetCase);
+    await repository.create(otherCase);
+
+    await repository.updateStatus(targetCase.id, CaseStatus.draft);
+
+    final results = await repository.getList(
+      const CaseListQuery(
+        searchQuery: 'Anggaran',
+        statuses: [CaseStatus.draft],
+        types: [CaseType.amendment],
+      ),
+    );
+
+    expect(results, hasLength(1));
+    expect(results.first.id, targetCase.id);
+  });
+
+  test('get list defaults to updatedAt descending', () async {
+    final client = Client(
+      id: 'client-sort-001',
+      name: 'Client Sort',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000401',
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final dates = [
+      DateTime(2026, 5, 1),
+      DateTime(2026, 5, 3),
+      DateTime(2026, 5, 2),
+    ];
+
+    for (var i = 0; i < dates.length; i++) {
+      await repository.create(
+        NotaryCase(
+          id: 'case-sort-default-00$i',
+          clientId: client.id,
+          type: CaseType.incorporation,
+          status: CaseStatus.newCase,
+          title: 'Case $i',
+          createdAt: dates[i],
+          updatedAt: dates[i],
+        ),
+      );
+    }
+
+    final results = await repository.getList(const CaseListQuery());
+
+    expect(results.map((item) => item.id).toList(), [
+      'case-sort-default-001',
+      'case-sort-default-002',
+      'case-sort-default-000',
+    ]);
+  });
+
+  test('get list sorts by createdAt ascending', () async {
+    final client = Client(
+      id: 'client-sort-002',
+      name: 'Client Sort Created',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000402',
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final dates = [
+      DateTime(2026, 5, 3),
+      DateTime(2026, 5, 1),
+      DateTime(2026, 5, 2),
+    ];
+
+    for (var i = 0; i < dates.length; i++) {
+      await repository.create(
+        NotaryCase(
+          id: 'case-sort-created-00$i',
+          clientId: client.id,
+          type: CaseType.incorporation,
+          status: CaseStatus.newCase,
+          title: 'Case $i',
+          createdAt: dates[i],
+          updatedAt: dates[i],
+        ),
+      );
+    }
+
+    final results = await repository.getList(
+      const CaseListQuery(
+        sortBy: CaseListSortField.createdAt,
+        sortDirection: SortDirection.ascending,
+      ),
+    );
+
+    expect(results.map((item) => item.id).toList(), [
+      'case-sort-created-001',
+      'case-sort-created-002',
+      'case-sort-created-000',
+    ]);
+  });
+
+  test('get list sorts by title descending', () async {
+    final client = Client(
+      id: 'client-sort-003',
+      name: 'Client Sort Title',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000403',
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final titles = ['Alpha', 'Charlie', 'Bravo'];
+
+    for (var i = 0; i < titles.length; i++) {
+      await repository.create(
+        NotaryCase(
+          id: 'case-sort-title-00$i',
+          clientId: client.id,
+          type: CaseType.incorporation,
+          status: CaseStatus.newCase,
+          title: titles[i],
+          createdAt: DateTime(2026, 5, 1),
+          updatedAt: DateTime(2026, 5, 1),
+        ),
+      );
+    }
+
+    final results = await repository.getList(
+      const CaseListQuery(
+        sortBy: CaseListSortField.title,
+        sortDirection: SortDirection.descending,
+      ),
+    );
+
+    expect(results.map((item) => item.title).toList(), [
+      'Charlie',
+      'Bravo',
+      'Alpha',
+    ]);
+  });
+
+  test('get list uses ID ascending as a stable tie-breaker', () async {
+    final client = Client(
+      id: 'client-sort-004',
+      name: 'Client Sort Tie',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000404',
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final ids = ['case-sort-tie-003', 'case-sort-tie-001', 'case-sort-tie-002'];
+
+    for (final id in ids) {
+      await repository.create(
+        NotaryCase(
+          id: id,
+          clientId: client.id,
+          type: CaseType.incorporation,
+          status: CaseStatus.newCase,
+          title: 'Same Title',
+          createdAt: DateTime(2026, 5, 1),
+          updatedAt: DateTime(2026, 5, 1),
+        ),
+      );
+    }
+
+    final results = await repository.getList(
+      const CaseListQuery(
+        sortBy: CaseListSortField.title,
+        sortDirection: SortDirection.ascending,
+      ),
+    );
+
+    expect(results.map((item) => item.id).toList(), [
+      'case-sort-tie-001',
+      'case-sort-tie-002',
+      'case-sort-tie-003',
+    ]);
+  });
+
+  test('get list sorts by createdAt descending', () async {
+    final client = Client(
+      id: 'client-sort-005',
+      name: 'Client Sort Created Desc',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000405',
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final dates = [
+      DateTime(2026, 5, 1),
+      DateTime(2026, 5, 3),
+      DateTime(2026, 5, 2),
+    ];
+
+    for (var i = 0; i < dates.length; i++) {
+      await repository.create(
+        NotaryCase(
+          id: 'case-sort-created-desc-00$i',
+          clientId: client.id,
+          type: CaseType.incorporation,
+          status: CaseStatus.newCase,
+          title: 'Case $i',
+          createdAt: dates[i],
+          updatedAt: dates[i],
+        ),
+      );
+    }
+
+    final results = await repository.getList(
+      const CaseListQuery(
+        sortBy: CaseListSortField.createdAt,
+        sortDirection: SortDirection.descending,
+      ),
+    );
+
+    expect(results.map((item) => item.id).toList(), [
+      'case-sort-created-desc-001',
+      'case-sort-created-desc-002',
+      'case-sort-created-desc-000',
+    ]);
+  });
+
+  test('get list sorts by title ascending', () async {
+    final client = Client(
+      id: 'client-sort-006',
+      name: 'Client Sort Title Asc',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000406',
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final titles = ['Charlie', 'Alpha', 'Bravo'];
+
+    for (var i = 0; i < titles.length; i++) {
+      await repository.create(
+        NotaryCase(
+          id: 'case-sort-title-asc-00$i',
+          clientId: client.id,
+          type: CaseType.incorporation,
+          status: CaseStatus.newCase,
+          title: titles[i],
+          createdAt: DateTime(2026, 5, 1),
+          updatedAt: DateTime(2026, 5, 1),
+        ),
+      );
+    }
+
+    final results = await repository.getList(
+      const CaseListQuery(
+        sortBy: CaseListSortField.title,
+        sortDirection: SortDirection.ascending,
+      ),
+    );
+
+    expect(results.map((item) => item.title).toList(), [
+      'Alpha',
+      'Bravo',
+      'Charlie',
+    ]);
   });
 }

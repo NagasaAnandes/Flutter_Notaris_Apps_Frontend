@@ -2,6 +2,8 @@ import '../entities/case_kbli.dart';
 import '../entities/case_party.dart';
 import '../entities/notary_case.dart';
 import '../enums/case_status.dart';
+import '../entities/case_list_item.dart';
+import '../filters/case_list_query.dart';
 
 abstract interface class CaseRepository {
   Future<NotaryCase?> getById(String id);
@@ -37,4 +39,6 @@ abstract interface class CaseRepository {
   Future<void> updateKbli(CaseKbli caseKbli);
 
   Future<void> removeKbli(String caseKbliId);
+
+  Future<List<CaseListItem>> getList(CaseListQuery query);
 }

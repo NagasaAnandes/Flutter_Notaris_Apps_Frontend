@@ -3,6 +3,9 @@ import '../../domain/entities/case_party.dart';
 import '../../domain/entities/notary_case.dart';
 import '../../domain/enums/case_status.dart';
 import '../../domain/repositories/case_repository.dart';
+import '../../domain/entities/case_list_item.dart';
+import '../../domain/filters/case_list_query.dart';
+import '../../domain/enums/case_type.dart';
 import '../datasources/local/case_kbli_local_datasource.dart';
 import '../datasources/local/case_local_datasource.dart';
 import '../datasources/local/case_party_local_datasource.dart';
@@ -183,5 +186,23 @@ class CaseRepositoryImpl implements CaseRepository {
   @override
   Future<void> removeKbli(String caseKbliId) async {
     await _caseKbliDataSource.delete(caseKbliId);
+  }
+
+  @override
+  Future<List<CaseListItem>> getList(CaseListQuery query) async {
+    final data = await _caseDataSource.getList(query);
+
+    return data.map((map) {
+      return CaseListItem(
+        id: map['id'] as String,
+        clientId: map['client_id'] as String,
+        clientName: map['client_name'] as String,
+        type: CaseType.fromCode(map['type'] as String),
+        status: CaseStatus.fromCode(map['status'] as String),
+        title: map['title'] as String,
+        createdAt: DateTime.parse(map['created_at'] as String),
+        updatedAt: DateTime.parse(map['updated_at'] as String),
+      );
+    }).toList();
   }
 }

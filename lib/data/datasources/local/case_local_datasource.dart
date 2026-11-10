@@ -1,3 +1,5 @@
+import '../../../domain/filters/case_list_query.dart';
+
 abstract interface class CaseLocalDataSource {
   Future<Map<String, dynamic>?> getById(String id);
 
@@ -16,4 +18,6 @@ abstract interface class CaseLocalDataSource {
     String expectedStatus,
     String newStatus,
   );
+
+  Future<List<Map<String, dynamic>>> getList(CaseListQuery query);
 }

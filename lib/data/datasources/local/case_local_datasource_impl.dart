@@ -1,4 +1,5 @@
 import '../../../core/database/database.dart';
+import '../../../../domain/filters/case_list_query.dart';
 import 'case_local_datasource.dart';
 
 class CaseLocalDataSourceImpl implements CaseLocalDataSource {
@@ -58,6 +59,77 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
       whereArgs: [normalizedQuery, normalizedQuery],
       orderBy: 'created_at DESC',
     );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getList(CaseListQuery query) async {
+    final database = await _appDatabase.database;
+
+    final conditions = <String>[];
+    final arguments = <Object?>[];
+
+    final normalizedQuery = query.searchQuery.trim();
+
+    if (normalizedQuery.isNotEmpty) {
+      final pattern = '%$normalizedQuery%';
+
+      conditions.add('''
+        (
+          c.id LIKE ?
+          OR c.title LIKE ?
+          OR COALESCE(c.description, '') LIKE ?
+          OR cl.name LIKE ?
+        )
+      ''');
+
+      arguments.addAll([pattern, pattern, pattern, pattern]);
+    }
+
+    if (query.statuses.isNotEmpty) {
+      final placeholders = List.filled(query.statuses.length, '?').join(', ');
+
+      conditions.add('c.status IN ($placeholders)');
+      arguments.addAll(query.statuses.map((status) => status.code));
+    }
+
+    if (query.types.isNotEmpty) {
+      final placeholders = List.filled(query.types.length, '?').join(', ');
+
+      conditions.add('c.type IN ($placeholders)');
+      arguments.addAll(query.types.map((type) => type.code));
+    }
+
+    final whereClause = conditions.isEmpty
+        ? ''
+        : 'WHERE ${conditions.join(' AND ')}';
+
+    final sortColumn = switch (query.sortBy) {
+      CaseListSortField.updatedAt => 'c.updated_at',
+      CaseListSortField.createdAt => 'c.created_at',
+      CaseListSortField.title => 'c.title',
+    };
+
+    final sortDirection = switch (query.sortDirection) {
+      SortDirection.ascending => 'ASC',
+      SortDirection.descending => 'DESC',
+    };
+
+    return database.rawQuery('''
+      SELECT
+        c.id,
+        c.client_id,
+        cl.name AS client_name,
+        c.type,
+        c.status,
+        c.title,
+        c.created_at,
+        c.updated_at
+      FROM cases AS c
+      INNER JOIN clients AS cl
+        ON cl.id = c.client_id
+      $whereClause
+      ORDER BY $sortColumn $sortDirection, c.id ASC
+      ''', arguments);
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'package:bloc_concurrency/bloc_concurrency.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../domain/repositories/case_repository.dart';
@@ -12,6 +13,9 @@ class CaseBloc extends Bloc<CaseEvent, CaseState> {
   CaseBloc(this._caseRepository, this._clientRepository)
     : super(const CaseState()) {
     on<CaseClientsRequested>(_onClientsRequested);
+
+    on<CaseListRequested>(_onCaseListRequested, transformer: restartable());
+
     on<CaseCreateSubmitted>(_onCreateSubmitted);
   }
 
@@ -29,6 +33,35 @@ class CaseBloc extends Bloc<CaseEvent, CaseState> {
       emit(
         state.copyWith(isLoadingClients: false, clientsError: error.toString()),
       );
+    }
+  }
+
+  Future<void> _onCaseListRequested(
+    CaseListRequested event,
+    Emitter<CaseState> emit,
+  ) async {
+    final query = event.query ?? state.caseListQuery;
+
+    emit(
+      state.copyWith(
+        caseListQuery: query,
+        isLoadingCases: true,
+        clearCasesError: true,
+      ),
+    );
+
+    try {
+      final cases = await _caseRepository.getList(query);
+
+      emit(
+        state.copyWith(
+          cases: cases,
+          isLoadingCases: false,
+          clearCasesError: true,
+        ),
+      );
+    } catch (error) {
+      emit(state.copyWith(isLoadingCases: false, casesError: error.toString()));
     }
   }
 
@@ -58,6 +91,10 @@ class CaseBloc extends Bloc<CaseEvent, CaseState> {
           createdCaseId: event.caseData.id,
         ),
       );
+
+      // Refresh daftar menggunakan query terakhir.
+      // Kegagalan refresh ditangani terpisah oleh CaseListRequested.
+      add(CaseListRequested(query: state.caseListQuery));
     } catch (error) {
       emit(
         state.copyWith(isSubmitting: false, operationError: error.toString()),
