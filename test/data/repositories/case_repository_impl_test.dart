@@ -544,4 +544,59 @@ void main() {
     expect(result, isNotNull);
     expect(result!.status, CaseStatus.draft);
   });
+
+  test('create case rejects a non-existent client', () async {
+    final caseData = NotaryCase(
+      id: 'case-invalid-client',
+      clientId: 'client-does-not-exist',
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Pendirian PT Invalid Client',
+      createdAt: DateTime(2026, 2, 10),
+      updatedAt: DateTime(2026, 2, 10),
+    );
+
+    await expectLater(repository.create(caseData), throwsA(isA<Exception>()));
+
+    final result = await repository.getById('case-invalid-client');
+
+    expect(result, isNull);
+  });
+
+  test('client with an existing case cannot be deleted', () async {
+    final client = Client(
+      id: 'client-delete-restriction',
+      name: 'Test Client Delete Restriction',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000000000199',
+      createdAt: DateTime(2026, 2, 10),
+      updatedAt: DateTime(2026, 2, 10),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-client-delete-restriction',
+      clientId: client.id,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Pendirian PT Delete Restriction',
+      createdAt: DateTime(2026, 2, 10),
+      updatedAt: DateTime(2026, 2, 10),
+    );
+
+    await repository.create(caseData);
+
+    final database = await appDatabase.database;
+
+    await expectLater(
+      database.delete('clients', where: 'id = ?', whereArgs: [client.id]),
+      throwsA(isA<Exception>()),
+    );
+
+    // Pastikan Client dan Case tetap tersimpan.
+    expect(await clientRepository.getById(client.id), isNotNull);
+    expect(await repository.getById(caseData.id), isNotNull);
+  });
 }
