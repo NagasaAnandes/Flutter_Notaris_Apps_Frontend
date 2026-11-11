@@ -120,6 +120,11 @@ class CaseRepositoryImpl implements CaseRepository {
 
     final currentStatus = existingCase.status;
 
+    // Keeping the current status is a no-op, not a transition.
+    if (currentStatus == status) {
+      return;
+    }
+
     if (!currentStatus.canTransitionTo(status)) {
       throw StateError(
         'Invalid Case status transition: '

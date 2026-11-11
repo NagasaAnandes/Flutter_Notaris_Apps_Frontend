@@ -32,12 +32,15 @@ enum CaseStatus {
 
   /// Checks whether this Case can transition to [next].
   ///
+  /// Returns false when [next] is the current status because
+  /// keeping the same status is not a lifecycle transition.
+  ///
   /// CANCELLED is a special terminal status outside the normal lifecycle.
   /// It can be entered from any non-terminal status before FINAL.
   bool canTransitionTo(CaseStatus next) {
-    // Allow keeping the current status without a transition.
+    // A transition must change the current status.
     if (this == next) {
-      return true;
+      return false;
     }
 
     // Cancellation is allowed before FINAL or ARCHIVED.

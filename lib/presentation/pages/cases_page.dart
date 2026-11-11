@@ -11,6 +11,7 @@ import '../bloc/case/case_bloc.dart';
 import '../bloc/case/case_event.dart';
 import '../bloc/case/case_state.dart';
 import 'case_create_dialog.dart';
+import 'case_detail_page.dart';
 
 enum _CaseSortOption {
   recentlyUpdated,
@@ -28,6 +29,7 @@ class CasesPage extends StatefulWidget {
 
 class _CasesPageState extends State<CasesPage> {
   final TextEditingController _searchController = TextEditingController();
+  String? _selectedCaseId;
 
   @override
   void initState() {
@@ -37,6 +39,18 @@ class _CasesPageState extends State<CasesPage> {
       if (!mounted) return;
 
       context.read<CaseBloc>().add(const CaseListRequested());
+    });
+  }
+
+  void _openCaseDetail(String caseId) {
+    setState(() {
+      _selectedCaseId = caseId;
+    });
+  }
+
+  void _closeCaseDetail() {
+    setState(() {
+      _selectedCaseId = null;
     });
   }
 
@@ -289,6 +303,10 @@ class _CasesPageState extends State<CasesPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_selectedCaseId != null) {
+      return CaseDetailPage(caseId: _selectedCaseId!, onBack: _closeCaseDetail);
+    }
+
     final theme = Theme.of(context);
 
     return Padding(
@@ -531,7 +549,11 @@ class _CasesPageState extends State<CasesPage> {
                           itemCount: state.cases.length,
                           separatorBuilder: (_, _) => const SizedBox(height: 8),
                           itemBuilder: (context, index) {
-                            return _CaseListTile(item: state.cases[index]);
+                            return _CaseListTile(
+                              item: state.cases[index],
+                              onTap: () =>
+                                  _openCaseDetail(state.cases[index].id),
+                            );
                           },
                         ),
                       ),
@@ -549,8 +571,9 @@ class _CasesPageState extends State<CasesPage> {
 
 class _CaseListTile extends StatelessWidget {
   final CaseListItem item;
+  final VoidCallback onTap;
 
-  const _CaseListTile({required this.item});
+  const _CaseListTile({required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -558,6 +581,7 @@ class _CaseListTile extends StatelessWidget {
 
     return Card(
       child: ListTile(
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 20,
           vertical: 12,

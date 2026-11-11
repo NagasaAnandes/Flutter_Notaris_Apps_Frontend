@@ -8,13 +8,16 @@ import '../data/datasources/local/client_revision_local_datasource_impl.dart';
 import '../data/datasources/local/document_local_datasource_impl.dart';
 import '../data/datasources/local/document_revision_local_datasource_impl.dart';
 import '../data/repositories/case_repository_impl.dart';
+import '../data/repositories/case_detail_repository_impl.dart';
 import '../data/repositories/client_detail_repository_impl.dart';
 import '../data/repositories/client_repository_impl.dart';
 import '../data/repositories/document_repository_impl.dart';
 import '../domain/repositories/case_repository.dart';
+import '../domain/repositories/case_detail_repository.dart';
 import '../domain/repositories/client_detail_repository.dart';
 import '../domain/repositories/client_repository.dart';
 import '../presentation/bloc/case/case_bloc.dart';
+import '../presentation/bloc/case_detail/case_detail_bloc.dart';
 import '../presentation/bloc/client/client_bloc.dart';
 
 class AppDependencies {
@@ -58,9 +61,17 @@ class AppDependencies {
       documentRepository,
     );
 
+    caseDetailRepository = CaseDetailRepositoryImpl(
+      caseRepository,
+      clientRepository,
+      documentRepository,
+    );
+
     clientBloc = ClientBloc(clientRepository, clientDetailRepository);
 
     caseBloc = CaseBloc(caseRepository, clientRepository);
+
+    caseDetailBloc = CaseDetailBloc(caseDetailRepository);
   }
 
   final AppDatabase _database;
@@ -68,9 +79,11 @@ class AppDependencies {
   late final ClientRepository clientRepository;
   late final CaseRepository caseRepository;
   late final ClientDetailRepository clientDetailRepository;
+  late final CaseDetailRepository caseDetailRepository;
 
   late final ClientBloc clientBloc;
   late final CaseBloc caseBloc;
+  late final CaseDetailBloc caseDetailBloc;
 
   Future<void>? _disposeFuture;
 
@@ -83,6 +96,7 @@ class AppDependencies {
     // Close BLoCs before closing the database they depend on.
     await caseBloc.close();
     await clientBloc.close();
+    await caseDetailBloc.close();
 
     await _database.close();
   }
