@@ -6,6 +6,7 @@ import '../../domain/repositories/case_repository.dart';
 import '../../domain/entities/case_list_item.dart';
 import '../../domain/filters/case_list_query.dart';
 import '../../domain/enums/case_type.dart';
+import '../../core/database/database.dart';
 import '../datasources/local/case_kbli_local_datasource.dart';
 import '../datasources/local/case_local_datasource.dart';
 import '../datasources/local/case_party_local_datasource.dart';
@@ -14,11 +15,13 @@ import '../models/case_party_model.dart';
 import '../models/notary_case_model.dart';
 
 class CaseRepositoryImpl implements CaseRepository {
+  final AppDatabase _appDatabase;
   final CaseLocalDataSource _caseDataSource;
   final CasePartyLocalDataSource _casePartyDataSource;
   final CaseKbliLocalDataSource _caseKbliDataSource;
 
   const CaseRepositoryImpl(
+    this._appDatabase,
     this._caseDataSource,
     this._casePartyDataSource,
     this._caseKbliDataSource,
@@ -109,30 +112,59 @@ class CaseRepositoryImpl implements CaseRepository {
 
   @override
   Future<void> updateStatus(String caseId, CaseStatus status) async {
-    final existingCase = await getById(caseId);
-
-    if (existingCase == null) {
-      throw StateError(
-        'Cannot update status. '
-        'Case with ID $caseId was not found.',
+    await _appDatabase.transaction((transaction) async {
+      final existingData = await _caseDataSource.getById(
+        caseId,
+        executor: transaction,
       );
-    }
 
-    final currentStatus = existingCase.status;
+      if (existingData == null) {
+        throw StateError(
+          'Cannot update status. '
+          'Case with ID $caseId was not found.',
+        );
+      }
 
-    // Keeping the current status is a no-op, not a transition.
-    if (currentStatus == status) {
-      return;
-    }
+      final existingCase = NotaryCaseModel.fromMap(existingData).toEntity();
 
-    if (!currentStatus.canTransitionTo(status)) {
-      throw StateError(
-        'Invalid Case status transition: '
-        '${currentStatus.code} -> ${status.code}.',
+      final currentStatus = existingCase.status;
+
+      // Keeping the current status is a no-op.
+      if (currentStatus == status) {
+        return;
+      }
+
+      if (!currentStatus.canTransitionTo(status)) {
+        throw StateError(
+          'Invalid Case status transition: '
+          '${currentStatus.code} -> ${status.code}.',
+        );
+      }
+
+      final now = DateTime.now();
+
+      final openedAt =
+          currentStatus == CaseStatus.newCase && status == CaseStatus.draft
+          ? (existingCase.openedAt ?? now)
+          : existingCase.openedAt;
+
+      final isClosingStatus =
+          status == CaseStatus.archived || status == CaseStatus.cancelled;
+
+      final closedAt = isClosingStatus
+          ? (existingCase.closedAt ?? now)
+          : existingCase.closedAt;
+
+      await _caseDataSource.updateStatus(
+        caseId,
+        currentStatus.code,
+        status.code,
+        executor: transaction,
+        updatedAt: now,
+        openedAt: openedAt,
+        closedAt: closedAt,
       );
-    }
-
-    await _caseDataSource.updateStatus(caseId, currentStatus.code, status.code);
+    });
   }
 
   @override

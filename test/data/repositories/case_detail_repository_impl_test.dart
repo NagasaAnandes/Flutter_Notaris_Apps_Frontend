@@ -53,6 +53,7 @@ void main() {
     );
 
     caseRepository = CaseRepositoryImpl(
+      appDatabase,
       CaseLocalDataSourceImpl(appDatabase),
       CasePartyLocalDataSourceImpl(appDatabase),
       CaseKbliLocalDataSourceImpl(appDatabase),

@@ -1,3 +1,5 @@
+import 'package:sqflite_common/sqlite_api.dart';
+
 import '../../../core/database/database.dart';
 import '../../../../domain/filters/case_list_query.dart';
 import 'case_local_datasource.dart';
@@ -8,8 +10,11 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
   const CaseLocalDataSourceImpl(this._appDatabase);
 
   @override
-  Future<Map<String, dynamic>?> getById(String id) async {
-    final database = await _appDatabase.database;
+  Future<Map<String, dynamic>?> getById(
+    String id, {
+    DatabaseExecutor? executor,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     final result = await database.query(
       'cases',
@@ -164,13 +169,22 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
   Future<void> updateStatus(
     String caseId,
     String expectedStatus,
-    String newStatus,
-  ) async {
-    final database = await _appDatabase.database;
+    String newStatus, {
+    DatabaseExecutor? executor,
+    required DateTime updatedAt,
+    required DateTime? openedAt,
+    required DateTime? closedAt,
+  }) async {
+    final database = executor ?? await _appDatabase.database;
 
     final affectedRows = await database.update(
       'cases',
-      {'status': newStatus, 'updated_at': DateTime.now().toIso8601String()},
+      {
+        'status': newStatus,
+        'updated_at': updatedAt.toIso8601String(),
+        'opened_at': openedAt?.toIso8601String(),
+        'closed_at': closedAt?.toIso8601String(),
+      },
       where: 'id = ? AND status = ?',
       whereArgs: [caseId, expectedStatus],
     );
@@ -179,7 +193,7 @@ class CaseLocalDataSourceImpl implements CaseLocalDataSource {
       return;
     }
 
-    final existingCase = await getById(caseId);
+    final existingCase = await getById(caseId, executor: executor);
 
     if (existingCase == null) {
       throw StateError('Case with ID $caseId was not found.');

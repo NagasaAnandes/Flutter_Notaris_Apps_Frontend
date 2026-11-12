@@ -45,6 +45,7 @@ class AppDependencies {
     );
 
     caseRepository = CaseRepositoryImpl(
+      database,
       caseDataSource,
       casePartyDataSource,
       caseKbliDataSource,

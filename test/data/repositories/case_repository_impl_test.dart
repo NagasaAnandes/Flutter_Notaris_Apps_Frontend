@@ -46,6 +46,7 @@ void main() {
     final caseKbliDataSource = CaseKbliLocalDataSourceImpl(appDatabase);
 
     repository = CaseRepositoryImpl(
+      appDatabase,
       caseDataSource,
       casePartyDataSource,
       caseKbliDataSource,
@@ -66,6 +67,42 @@ void main() {
   tearDown(() async {
     await appDatabase.close();
   });
+
+  Future<NotaryCase> createTimestampTestCase({
+    required String caseId,
+    required String clientId,
+    required String identityNumber,
+    DateTime? openedAt,
+    DateTime? closedAt,
+  }) async {
+    final client = Client(
+      id: clientId,
+      name: 'Client Timestamp Test',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: identityNumber,
+      createdAt: DateTime(2026, 6, 1),
+      updatedAt: DateTime(2026, 6, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: caseId,
+      clientId: clientId,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Case Timestamp Test',
+      openedAt: openedAt,
+      closedAt: closedAt,
+      createdAt: DateTime(2026, 6, 1),
+      updatedAt: DateTime(2026, 6, 1),
+    );
+
+    await repository.create(caseData);
+
+    return caseData;
+  }
 
   test('create and get case', () async {
     final client = Client(
@@ -320,6 +357,144 @@ void main() {
 
     expect(result, isNotNull);
     expect(result!.status, CaseStatus.dataComplete);
+
+    expect(result.openedAt, isNotNull);
+    expect(result.closedAt, isNull);
+  });
+
+  test('archiving Case sets closedAt without changing openedAt', () async {
+    final client = Client(
+      id: 'client-timestamp-001',
+      name: 'Client Timestamp',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3173000099000001',
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    );
+
+    await clientRepository.create(client);
+
+    final caseData = NotaryCase(
+      id: 'case-timestamp-001',
+      clientId: client.id,
+      type: CaseType.incorporation,
+      status: CaseStatus.newCase,
+      title: 'Case Timestamp Test',
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    );
+
+    await repository.create(caseData);
+
+    await repository.updateStatus(caseData.id, CaseStatus.draft);
+
+    final beforeArchive = await repository.getById(caseData.id);
+    final originalOpenedAt = beforeArchive!.openedAt;
+
+    await repository.updateStatus(caseData.id, CaseStatus.dataComplete);
+    await repository.updateStatus(caseData.id, CaseStatus.validated);
+    await repository.updateStatus(caseData.id, CaseStatus.documentGenerated);
+    await repository.updateStatus(caseData.id, CaseStatus.inReview);
+    await repository.updateStatus(caseData.id, CaseStatus.approved);
+    await repository.updateStatus(caseData.id, CaseStatus.finalized);
+    await repository.updateStatus(caseData.id, CaseStatus.archived);
+
+    final result = await repository.getById(caseData.id);
+
+    expect(result, isNotNull);
+    expect(result!.status, CaseStatus.archived);
+    expect(result.openedAt, originalOpenedAt);
+    expect(result.closedAt, isNotNull);
+    expect(
+      result.closedAt!.isAfter(result.openedAt!) ||
+          result.closedAt!.isAtSameMomentAs(result.openedAt!),
+      isTrue,
+    );
+  });
+
+  test('cancelling Case sets closedAt', () async {
+    final caseData = await createTimestampTestCase(
+      caseId: 'case-cancel-timestamp-001',
+      clientId: 'client-cancel-timestamp-001',
+      identityNumber: '3173000099000101',
+    );
+
+    await repository.updateStatus(caseData.id, CaseStatus.cancelled);
+
+    final result = await repository.getById(caseData.id);
+
+    expect(result, isNotNull);
+    expect(result!.status, CaseStatus.cancelled);
+    expect(result.openedAt, isNull);
+    expect(result.closedAt, isNotNull);
+    expect(
+      result.closedAt!.isAfter(caseData.createdAt) ||
+          result.closedAt!.isAtSameMomentAs(caseData.createdAt),
+      isTrue,
+    );
+  });
+
+  test('existing closedAt is preserved during cancellation', () async {
+    final originalClosedAt = DateTime(2026, 6, 5, 14);
+
+    final caseData = await createTimestampTestCase(
+      caseId: 'case-closed-preserved-001',
+      clientId: 'client-closed-preserved-001',
+      identityNumber: '3173000099000102',
+      closedAt: originalClosedAt,
+    );
+
+    await repository.updateStatus(caseData.id, CaseStatus.cancelled);
+
+    final result = await repository.getById(caseData.id);
+
+    expect(result, isNotNull);
+    expect(result!.status, CaseStatus.cancelled);
+    expect(result.closedAt, originalClosedAt);
+  });
+
+  test('same status request does not change timestamps', () async {
+    final caseData = await createTimestampTestCase(
+      caseId: 'case-noop-timestamp-001',
+      clientId: 'client-noop-timestamp-001',
+      identityNumber: '3173000099000103',
+    );
+
+    final before = await repository.getById(caseData.id);
+
+    await repository.updateStatus(caseData.id, CaseStatus.newCase);
+
+    final after = await repository.getById(caseData.id);
+
+    expect(after, isNotNull);
+    expect(after!.status, CaseStatus.newCase);
+    expect(after.openedAt, before!.openedAt);
+    expect(after.closedAt, before.closedAt);
+    expect(after.updatedAt, before.updatedAt);
+  });
+
+  test('invalid transition does not change lifecycle timestamps', () async {
+    final caseData = await createTimestampTestCase(
+      caseId: 'case-invalid-timestamp-001',
+      clientId: 'client-invalid-timestamp-001',
+      identityNumber: '3173000099000104',
+    );
+
+    final before = await repository.getById(caseData.id);
+
+    await expectLater(
+      repository.updateStatus(caseData.id, CaseStatus.finalized),
+      throwsA(isA<StateError>()),
+    );
+
+    final after = await repository.getById(caseData.id);
+
+    expect(after, isNotNull);
+    expect(after!.status, CaseStatus.newCase);
+    expect(after.openedAt, before!.openedAt);
+    expect(after.closedAt, before.closedAt);
+    expect(after.updatedAt, before.updatedAt);
   });
 
   test('update case rejects status changes', () async {
@@ -536,6 +711,9 @@ void main() {
         'case-b3-002',
         CaseStatus.newCase.code,
         CaseStatus.draft.code,
+        updatedAt: DateTime(2026, 1, 1),
+        openedAt: null,
+        closedAt: null,
       ),
       throwsA(isA<StateError>()),
     );

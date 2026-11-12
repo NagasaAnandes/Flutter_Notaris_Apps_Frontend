@@ -1,5 +1,5 @@
 name: flutter_notaris_apps_frontend
-description: "A new Flutter project."
+description: "Notaris Apps."
 publish_to: "none"
 version: 0.1.0+1
 
@@ -13,6 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_bloc: ^9.1.1
+  material_ui: ^1.11.0
   mocktail: ^1.0.5
   path: ^1.9.1
   path_provider: ^2.1.6

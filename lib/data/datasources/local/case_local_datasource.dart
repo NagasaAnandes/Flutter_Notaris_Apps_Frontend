@@ -1,7 +1,12 @@
+import 'package:sqflite_common/sqlite_api.dart';
+
 import '../../../domain/filters/case_list_query.dart';
 
 abstract interface class CaseLocalDataSource {
-  Future<Map<String, dynamic>?> getById(String id);
+  Future<Map<String, dynamic>?> getById(
+    String id, {
+    DatabaseExecutor? executor,
+  });
 
   Future<List<Map<String, dynamic>>> getAll();
 
@@ -16,8 +21,12 @@ abstract interface class CaseLocalDataSource {
   Future<void> updateStatus(
     String caseId,
     String expectedStatus,
-    String newStatus,
-  );
+    String newStatus, {
+    DatabaseExecutor? executor,
+    required DateTime updatedAt,
+    required DateTime? openedAt,
+    required DateTime? closedAt,
+  });
 
   Future<List<Map<String, dynamic>>> getList(CaseListQuery query);
 }
