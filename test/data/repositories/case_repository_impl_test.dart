@@ -50,6 +50,7 @@ void main() {
       caseDataSource,
       casePartyDataSource,
       caseKbliDataSource,
+      AuditLogLocalDataSourceImpl(appDatabase),
     );
 
     clientRepository = ClientRepositoryImpl(
@@ -360,6 +361,76 @@ void main() {
 
     expect(result.openedAt, isNotNull);
     expect(result.closedAt, isNull);
+  });
+
+  test('status transition creates exactly one audit log', () async {
+    final caseData = await createTimestampTestCase(
+      caseId: 'case-audit-single-001',
+      clientId: 'client-audit-single-001',
+      identityNumber: '3173000099000201',
+    );
+
+    await repository.updateStatus(caseData.id, CaseStatus.draft);
+
+    final database = await appDatabase.database;
+
+    final auditLogs = await database.query(
+      'audit_logs',
+      where: 'case_id = ?',
+      whereArgs: [caseData.id],
+    );
+
+    expect(auditLogs, hasLength(1));
+    expect(auditLogs.first['event_type'], 'caseStatusChanged');
+    expect(auditLogs.first['entity_type'], 'case');
+    expect(auditLogs.first['entity_id'], caseData.id);
+
+    expect(
+      auditLogs.first['description'],
+      'Case status changed from NEW to DRAFT.',
+    );
+  });
+
+  test('audit log failure rolls back Case status update', () async {
+    final caseData = await createTimestampTestCase(
+      caseId: 'case-audit-rollback-001',
+      clientId: 'client-audit-rollback-001',
+      identityNumber: '3173000099000202',
+    );
+
+    final database = await appDatabase.database;
+
+    // Force audit log insertion to fail.
+    await database.execute('''
+      CREATE TRIGGER fail_audit_insert
+      BEFORE INSERT ON audit_logs
+      BEGIN
+        SELECT RAISE(ABORT, 'Forced audit log failure');
+      END;
+    ''');
+
+    await expectLater(
+      repository.updateStatus(caseData.id, CaseStatus.draft),
+      throwsA(isA<Exception>()),
+    );
+
+    // Verify Case status and timestamps were rolled back.
+    final result = await repository.getById(caseData.id);
+
+    expect(result, isNotNull);
+    expect(result!.status, CaseStatus.newCase);
+    expect(result.openedAt, isNull);
+    expect(result.closedAt, isNull);
+    expect(result.updatedAt, caseData.updatedAt);
+
+    // Verify no audit log was persisted.
+    final auditLogs = await database.query(
+      'audit_logs',
+      where: 'case_id = ?',
+      whereArgs: [caseData.id],
+    );
+
+    expect(auditLogs, isEmpty);
   });
 
   test('archiving Case sets closedAt without changing openedAt', () async {

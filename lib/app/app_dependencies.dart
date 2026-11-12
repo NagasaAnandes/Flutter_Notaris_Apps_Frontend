@@ -18,6 +18,7 @@ import '../domain/repositories/client_detail_repository.dart';
 import '../domain/repositories/client_repository.dart';
 import '../presentation/bloc/case/case_bloc.dart';
 import '../presentation/bloc/case_detail/case_detail_bloc.dart';
+import '../presentation/bloc/case_status/case_status_bloc.dart';
 import '../presentation/bloc/client/client_bloc.dart';
 
 class AppDependencies {
@@ -49,6 +50,7 @@ class AppDependencies {
       caseDataSource,
       casePartyDataSource,
       caseKbliDataSource,
+      auditLogDataSource,
     );
 
     final documentRepository = DocumentRepositoryImpl(
@@ -73,6 +75,8 @@ class AppDependencies {
     caseBloc = CaseBloc(caseRepository, clientRepository);
 
     caseDetailBloc = CaseDetailBloc(caseDetailRepository);
+
+    caseStatusBloc = CaseStatusBloc(caseRepository);
   }
 
   final AppDatabase _database;
@@ -85,6 +89,7 @@ class AppDependencies {
   late final ClientBloc clientBloc;
   late final CaseBloc caseBloc;
   late final CaseDetailBloc caseDetailBloc;
+  late final CaseStatusBloc caseStatusBloc;
 
   Future<void>? _disposeFuture;
 
@@ -98,6 +103,7 @@ class AppDependencies {
     await caseBloc.close();
     await clientBloc.close();
     await caseDetailBloc.close();
+    await caseStatusBloc.close();
 
     await _database.close();
   }

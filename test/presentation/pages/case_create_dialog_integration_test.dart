@@ -79,6 +79,7 @@ void main() {
       caseDataSource,
       casePartyDataSource,
       caseKbliDataSource,
+      auditLogDataSource,
     );
 
     // Seed Client ke SQLite.

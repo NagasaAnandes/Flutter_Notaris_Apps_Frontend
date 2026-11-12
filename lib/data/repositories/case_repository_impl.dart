@@ -1,3 +1,8 @@
+import 'dart:convert';
+
+import 'package:uuid/uuid.dart';
+
+import '../../domain/enums/audit_event_type.dart';
 import '../../domain/entities/case_kbli.dart';
 import '../../domain/entities/case_party.dart';
 import '../../domain/entities/notary_case.dart';
@@ -8,6 +13,7 @@ import '../../domain/filters/case_list_query.dart';
 import '../../domain/enums/case_type.dart';
 import '../../core/database/database.dart';
 import '../datasources/local/case_kbli_local_datasource.dart';
+import '../datasources/local/audit_log_local_datasource.dart';
 import '../datasources/local/case_local_datasource.dart';
 import '../datasources/local/case_party_local_datasource.dart';
 import '../models/case_kbli_model.dart';
@@ -19,12 +25,14 @@ class CaseRepositoryImpl implements CaseRepository {
   final CaseLocalDataSource _caseDataSource;
   final CasePartyLocalDataSource _casePartyDataSource;
   final CaseKbliLocalDataSource _caseKbliDataSource;
+  final AuditLogLocalDataSource _auditLogDataSource;
 
   const CaseRepositoryImpl(
     this._appDatabase,
     this._caseDataSource,
     this._casePartyDataSource,
     this._caseKbliDataSource,
+    this._auditLogDataSource,
   );
 
   @override
@@ -155,6 +163,9 @@ class CaseRepositoryImpl implements CaseRepository {
           ? (existingCase.closedAt ?? now)
           : existingCase.closedAt;
 
+      final auditLogId = const Uuid().v4();
+
+      // Update Case status and lifecycle timestamps.
       await _caseDataSource.updateStatus(
         caseId,
         currentStatus.code,
@@ -164,6 +175,24 @@ class CaseRepositoryImpl implements CaseRepository {
         openedAt: openedAt,
         closedAt: closedAt,
       );
+
+      // Insert exactly one audit log in the same transaction.
+      await _auditLogDataSource.insert({
+        'id': auditLogId,
+        'event_type': AuditEventType.caseStatusChanged.name,
+        'case_id': caseId,
+        'document_id': null,
+        'entity_type': 'case',
+        'entity_id': caseId,
+        'description':
+            'Case status changed from ${currentStatus.code} '
+            'to ${status.code}.',
+        'metadata': jsonEncode({
+          'previous_status': currentStatus.code,
+          'new_status': status.code,
+        }),
+        'created_at': now.toIso8601String(),
+      }, executor: transaction);
     });
   }
 

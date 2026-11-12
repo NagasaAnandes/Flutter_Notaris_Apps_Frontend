@@ -57,6 +57,7 @@ void main() {
       CaseLocalDataSourceImpl(appDatabase),
       CasePartyLocalDataSourceImpl(appDatabase),
       CaseKbliLocalDataSourceImpl(appDatabase),
+      AuditLogLocalDataSourceImpl(appDatabase),
     );
 
     documentRepository = DocumentRepositoryImpl(
