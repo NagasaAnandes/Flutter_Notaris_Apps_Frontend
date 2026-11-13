@@ -1,9 +1,15 @@
 import '../../domain/entities/case_kbli.dart';
+import '../../domain/entities/kbli_version.dart';
 
 class CaseKbliModel {
   final String id;
   final String caseId;
-  final String kbliId;
+  final String kbliCatalogId;
+
+  final String kbliVersion;
+  final String kbliCodeSnapshot;
+  final String kbliTitleSnapshot;
+
   final int sequence;
   final int isPrimary;
   final String? notes;
@@ -13,7 +19,10 @@ class CaseKbliModel {
   const CaseKbliModel({
     required this.id,
     required this.caseId,
-    required this.kbliId,
+    required this.kbliCatalogId,
+    required this.kbliVersion,
+    required this.kbliCodeSnapshot,
+    required this.kbliTitleSnapshot,
     required this.sequence,
     required this.isPrimary,
     this.notes,
@@ -25,7 +34,10 @@ class CaseKbliModel {
     return CaseKbliModel(
       id: map['id'] as String,
       caseId: map['case_id'] as String,
-      kbliId: map['kbli_id'] as String,
+      kbliCatalogId: map['kbli_catalog_id'] as String,
+      kbliVersion: map['kbli_version'] as String,
+      kbliCodeSnapshot: map['kbli_code_snapshot'] as String,
+      kbliTitleSnapshot: map['kbli_title_snapshot'] as String,
       sequence: map['sequence'] as int,
       isPrimary: map['is_primary'] as int,
       notes: map['notes'] as String?,
@@ -38,7 +50,10 @@ class CaseKbliModel {
     return CaseKbliModel(
       id: entity.id,
       caseId: entity.caseId,
-      kbliId: entity.kbliId,
+      kbliCatalogId: entity.kbliCatalogId,
+      kbliVersion: entity.kbliVersion == KbliVersion.kbli2020 ? '2020' : '2025',
+      kbliCodeSnapshot: entity.kbliCodeSnapshot,
+      kbliTitleSnapshot: entity.kbliTitleSnapshot,
       sequence: entity.sequence,
       isPrimary: entity.isPrimary ? 1 : 0,
       notes: entity.notes,
@@ -51,7 +66,10 @@ class CaseKbliModel {
     return CaseKbli(
       id: id,
       caseId: caseId,
-      kbliId: kbliId,
+      kbliCatalogId: kbliCatalogId,
+      kbliVersion: _parseVersion(kbliVersion),
+      kbliCodeSnapshot: kbliCodeSnapshot,
+      kbliTitleSnapshot: kbliTitleSnapshot,
       sequence: sequence,
       isPrimary: isPrimary == 1,
       notes: notes,
@@ -64,12 +82,26 @@ class CaseKbliModel {
     return {
       'id': id,
       'case_id': caseId,
-      'kbli_id': kbliId,
+      'kbli_catalog_id': kbliCatalogId,
+      'kbli_version': kbliVersion,
+      'kbli_code_snapshot': kbliCodeSnapshot,
+      'kbli_title_snapshot': kbliTitleSnapshot,
       'sequence': sequence,
       'is_primary': isPrimary,
       'notes': notes,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };
+  }
+
+  static KbliVersion _parseVersion(String value) {
+    switch (value) {
+      case '2020':
+        return KbliVersion.kbli2020;
+      case '2025':
+        return KbliVersion.kbli2025;
+      default:
+        throw FormatException('Unsupported KBLI version: $value');
+    }
   }
 }

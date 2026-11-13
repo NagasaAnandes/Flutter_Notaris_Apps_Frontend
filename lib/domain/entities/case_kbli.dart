@@ -1,7 +1,13 @@
+import 'kbli_version.dart';
+
 class CaseKbli {
   final String id;
   final String caseId;
-  final String kbliId;
+  final String kbliCatalogId;
+
+  final KbliVersion kbliVersion;
+  final String kbliCodeSnapshot;
+  final String kbliTitleSnapshot;
 
   final int sequence;
   final bool isPrimary;
@@ -13,7 +19,10 @@ class CaseKbli {
   const CaseKbli({
     required this.id,
     required this.caseId,
-    required this.kbliId,
+    required this.kbliCatalogId,
+    required this.kbliVersion,
+    required this.kbliCodeSnapshot,
+    required this.kbliTitleSnapshot,
     required this.sequence,
     required this.isPrimary,
     this.notes,

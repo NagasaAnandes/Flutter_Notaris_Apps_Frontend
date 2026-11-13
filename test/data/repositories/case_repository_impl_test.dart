@@ -15,6 +15,7 @@ import 'package:flutter_notaris_apps_frontend/domain/entities/case_party.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/client.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/notary_case.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/party.dart';
+import 'package:flutter_notaris_apps_frontend/domain/entities/kbli_version.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/case_party_role.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/case_status.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/case_type.dart';
@@ -275,17 +276,12 @@ void main() {
 
     final database = await appDatabase.database;
 
-    await database.insert('kbli', {
-      'id': 'kbli-001',
+    await database.insert('kbli_catalog', {
+      'id': 'kbli-2020-62010',
+      'version': '2020',
       'code': '62010',
-      'title': 'Aktivitas Pemrograman Komputer',
-      'description': 'Aktivitas pemrograman komputer.',
-      'keywords': 'software,programming',
-      'level': 5,
-      'parent_id': null,
-      'source': 'test',
-      'source_version': 'test-v1',
-      'is_active': 1,
+      'title_id': 'Aktivitas Pemrograman Komputer',
+      'description_id': 'Aktivitas pemrograman komputer.',
       'created_at': '2026-01-06T10:00:00.000',
       'updated_at': '2026-01-06T10:00:00.000',
     });
@@ -305,7 +301,10 @@ void main() {
     final caseKbli = CaseKbli(
       id: 'case-kbli-001',
       caseId: 'case-005',
-      kbliId: 'kbli-001',
+      kbliCatalogId: 'kbli-2020-62010',
+      kbliVersion: KbliVersion.kbli2020,
+      kbliCodeSnapshot: '62010',
+      kbliTitleSnapshot: 'Aktivitas Pemrograman Komputer',
       sequence: 1,
       isPrimary: true,
       notes: 'KBLI utama',
@@ -320,7 +319,10 @@ void main() {
     expect(results, hasLength(1));
     expect(results.first.id, 'case-kbli-001');
     expect(results.first.caseId, 'case-005');
-    expect(results.first.kbliId, 'kbli-001');
+    expect(results.first.kbliCatalogId, 'kbli-2020-62010');
+    expect(results.first.kbliVersion, KbliVersion.kbli2020);
+    expect(results.first.kbliCodeSnapshot, '62010');
+    expect(results.first.kbliTitleSnapshot, 'Aktivitas Pemrograman Komputer');
     expect(results.first.sequence, 1);
     expect(results.first.isPrimary, isTrue);
     expect(results.first.notes, 'KBLI utama');

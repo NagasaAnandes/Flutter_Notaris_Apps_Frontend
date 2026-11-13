@@ -1,7 +1,7 @@
 import 'package:sqflite_common/sqlite_api.dart';
 
 import '../../../core/database/database.dart';
-import '../../../../domain/filters/case_list_query.dart';
+import '../../../domain/filters/case_list_query.dart';
 import 'case_local_datasource.dart';
 
 class CaseLocalDataSourceImpl implements CaseLocalDataSource {

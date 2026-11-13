@@ -28,6 +28,14 @@ class MigrationRunner {
       if (oldVersion < 5 && newVersion >= 5) {
         await _migrateCaseStatusV5(txn);
       }
+
+      if (oldVersion < 6 && newVersion >= 6) {
+        await _createCaseWorkflowDraftsV6(txn);
+      }
+
+      if (oldVersion < 7 && newVersion >= 7) {
+        await _migrateKbliCatalogV7(txn);
+      }
     });
   }
 
@@ -601,5 +609,371 @@ class MigrationRunner {
         ELSE status
       END
     ''');
+  }
+
+  Future<void> _createCaseWorkflowDraftsV6(DatabaseExecutor database) async {
+    await database.execute('''
+    CREATE TABLE case_workflow_drafts (
+      case_id TEXT PRIMARY KEY NOT NULL,
+      current_step TEXT NOT NULL,
+      completed_steps TEXT NOT NULL DEFAULT '[]',
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      last_saved_at TEXT NOT NULL,
+
+      FOREIGN KEY (case_id)
+        REFERENCES cases (id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+    )
+  ''');
+  }
+
+  Future<void> _migrateKbliCatalogV7(DatabaseExecutor database) async {
+    // 1. Create unified KBLI catalog.
+    await database.execute('''
+      CREATE TABLE kbli_catalog (
+        id TEXT PRIMARY KEY NOT NULL,
+        version TEXT NOT NULL,
+        code TEXT NOT NULL,
+        title_id TEXT NOT NULL,
+        description_id TEXT,
+        title_en TEXT,
+        description_en TEXT,
+        id_version TEXT,
+        id_kategori TEXT,
+        tags TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+
+        UNIQUE (version, code),
+
+        CHECK (version IN ('2020', '2025'))
+      )
+    ''');
+
+    // 2. Create catalog source mapping.
+    await database.execute('''
+      CREATE TABLE kbli_catalog_sources (
+        id TEXT PRIMARY KEY NOT NULL,
+        catalog_id TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_record_id TEXT NOT NULL,
+        imported_at TEXT NOT NULL,
+
+        UNIQUE (source_type, source_record_id),
+
+        FOREIGN KEY (catalog_id)
+          REFERENCES kbli_catalog(id)
+          ON DELETE RESTRICT
+          ON UPDATE CASCADE
+      )
+    ''');
+
+    // 3. Import KBLI 2020.
+    await database.execute('''
+      INSERT INTO kbli_catalog (
+        id,
+        version,
+        code,
+        title_id,
+        description_id,
+        title_en,
+        description_en,
+        id_version,
+        id_kategori,
+        tags,
+        created_at,
+        updated_at
+      )
+      SELECT
+        'kbli-2020-' || kode,
+        '2020',
+        kode,
+        judul_id,
+        uraian_id,
+        judul_en,
+        uraian_en,
+        id_version,
+        id_kategori,
+        tags,
+        created_at,
+        created_at
+      FROM kbli_2020
+    ''');
+
+    // 4. Import KBLI 2025.
+    await database.execute('''
+      INSERT INTO kbli_catalog (
+        id,
+        version,
+        code,
+        title_id,
+        description_id,
+        title_en,
+        description_en,
+        id_version,
+        id_kategori,
+        tags,
+        created_at,
+        updated_at
+      )
+      SELECT
+        'kbli-2025-' || kode,
+        '2025',
+        kode,
+        judul_id,
+        uraian_id,
+        judul_en,
+        uraian_en,
+        id_version,
+        id_kategori,
+        tags,
+        created_at,
+        created_at
+      FROM kbli_2025
+    ''');
+
+    // 5. Register local dataset sources.
+    await database.execute('''
+      INSERT INTO kbli_catalog_sources (
+        id,
+        catalog_id,
+        source_type,
+        source_record_id,
+        imported_at
+      )
+      SELECT
+        'source-local-2020-' || id,
+        'kbli-2020-' || kode,
+        'local_2020',
+        id,
+        datetime('now')
+      FROM kbli_2020
+    ''');
+
+    await database.execute('''
+      INSERT INTO kbli_catalog_sources (
+        id,
+        catalog_id,
+        source_type,
+        source_record_id,
+        imported_at
+      )
+      SELECT
+        'source-local-2025-' || id,
+        'kbli-2025-' || kode,
+        'local_2025',
+        id,
+        datetime('now')
+      FROM kbli_2025
+    ''');
+
+    // 6. Validate legacy KBLI version mapping.
+    final invalidLegacyRows = await database.rawQuery('''
+      SELECT COUNT(*) AS total
+      FROM kbli old
+      LEFT JOIN kbli_catalog catalog
+        ON catalog.version = old.source_version
+        AND catalog.code = old.code
+      WHERE catalog.id IS NULL
+    ''');
+
+    final invalidLegacyCount = (invalidLegacyRows.first['total'] as int);
+
+    if (invalidLegacyCount > 0) {
+      throw StateError(
+        'KBLI v7 migration aborted: '
+        '$invalidLegacyCount legacy KBLI records '
+        'cannot be mapped to the unified catalog.',
+      );
+    }
+
+    // 7. Register legacy KBLI sources.
+    await database.execute('''
+      INSERT INTO kbli_catalog_sources (
+        id,
+        catalog_id,
+        source_type,
+        source_record_id,
+        imported_at
+      )
+      SELECT
+        'source-legacy-' || old.id,
+        catalog.id,
+        'legacy',
+        old.id,
+        datetime('now')
+      FROM kbli old
+      INNER JOIN kbli_catalog catalog
+        ON catalog.version = old.source_version
+        AND catalog.code = old.code
+    ''');
+
+    // 8. Create the new Case-KBLI relationship table.
+    await database.execute('''
+      CREATE TABLE case_kbli_v7 (
+        id TEXT PRIMARY KEY NOT NULL,
+        case_id TEXT NOT NULL,
+        kbli_catalog_id TEXT NOT NULL,
+
+        kbli_version TEXT NOT NULL,
+        kbli_code_snapshot TEXT NOT NULL,
+        kbli_title_snapshot TEXT NOT NULL,
+
+        sequence INTEGER NOT NULL,
+        is_primary INTEGER NOT NULL DEFAULT 0,
+        notes TEXT,
+
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+
+        UNIQUE (case_id, kbli_catalog_id),
+
+        FOREIGN KEY (case_id)
+          REFERENCES cases(id)
+          ON DELETE RESTRICT
+          ON UPDATE CASCADE,
+
+        FOREIGN KEY (kbli_catalog_id)
+          REFERENCES kbli_catalog(id)
+          ON DELETE RESTRICT
+          ON UPDATE CASCADE,
+
+        CHECK (is_primary IN (0, 1)),
+        CHECK (kbli_version IN ('2020', '2025'))
+      )
+    ''');
+
+    // 9. Validate that every existing Case-KBLI relation
+    //    can be mapped before copying any relation.
+    final invalidCaseKbliRows = await database.rawQuery('''
+      SELECT COUNT(*) AS total
+      FROM case_kbli old_case_kbli
+      LEFT JOIN kbli old_kbli
+        ON old_kbli.id = old_case_kbli.kbli_id
+      LEFT JOIN kbli_catalog catalog
+        ON catalog.version = old_kbli.source_version
+        AND catalog.code = old_kbli.code
+      WHERE catalog.id IS NULL
+    ''');
+
+    final invalidCaseKbliCount = (invalidCaseKbliRows.first['total'] as int);
+
+    if (invalidCaseKbliCount > 0) {
+      throw StateError(
+        'KBLI v7 migration aborted: '
+        '$invalidCaseKbliCount Case-KBLI relations '
+        'cannot be mapped.',
+      );
+    }
+
+    // 10. Copy existing Case-KBLI records and preserve snapshots.
+    await database.execute('''
+      INSERT INTO case_kbli_v7 (
+        id,
+        case_id,
+        kbli_catalog_id,
+        kbli_version,
+        kbli_code_snapshot,
+        kbli_title_snapshot,
+        sequence,
+        is_primary,
+        notes,
+        created_at,
+        updated_at
+      )
+      SELECT
+        old_case_kbli.id,
+        old_case_kbli.case_id,
+        catalog.id,
+        old_kbli.source_version,
+        old_kbli.code,
+        old_kbli.title,
+        old_case_kbli.sequence,
+        old_case_kbli.is_primary,
+        old_case_kbli.notes,
+        old_case_kbli.created_at,
+        old_case_kbli.updated_at
+      FROM case_kbli old_case_kbli
+      INNER JOIN kbli old_kbli
+        ON old_kbli.id = old_case_kbli.kbli_id
+      INNER JOIN kbli_catalog catalog
+        ON catalog.version = old_kbli.source_version
+        AND catalog.code = old_kbli.code
+    ''');
+
+    // 11. Verify the number of copied relations.
+    final oldCountRows = await database.rawQuery(
+      'SELECT COUNT(*) AS total FROM case_kbli',
+    );
+    final newCountRows = await database.rawQuery(
+      'SELECT COUNT(*) AS total FROM case_kbli_v7',
+    );
+
+    final oldCount = oldCountRows.first['total'] as int;
+    final newCount = newCountRows.first['total'] as int;
+
+    if (oldCount != newCount) {
+      throw StateError(
+        'KBLI v7 migration aborted: '
+        'old Case-KBLI count ($oldCount) '
+        'does not match new count ($newCount).',
+      );
+    }
+
+    // 12. Replace the old relationship table.
+    await database.execute('DROP TABLE case_kbli');
+
+    await database.execute('ALTER TABLE case_kbli_v7 RENAME TO case_kbli');
+
+    // 13. Create indexes.
+    await database.execute('''
+      CREATE INDEX idx_kbli_catalog_version_code
+      ON kbli_catalog(version, code)
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_kbli_catalog_title_id
+      ON kbli_catalog(title_id)
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_kbli_catalog_category
+      ON kbli_catalog(id_kategori)
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_kbli_catalog_sources_catalog_id
+      ON kbli_catalog_sources(catalog_id)
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_case_kbli_case_id
+      ON case_kbli(case_id)
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_case_kbli_catalog_id
+      ON case_kbli(kbli_catalog_id)
+    ''');
+
+    await database.execute('''
+      CREATE UNIQUE INDEX idx_case_kbli_single_primary
+      ON case_kbli(case_id)
+      WHERE is_primary = 1
+    ''');
+
+    // 14. Final foreign-key validation.
+    final foreignKeyErrors = await database.rawQuery(
+      'PRAGMA foreign_key_check',
+    );
+
+    if (foreignKeyErrors.isNotEmpty) {
+      throw StateError(
+        'KBLI v7 migration aborted: '
+        'foreign key violations detected.',
+      );
+    }
   }
 }

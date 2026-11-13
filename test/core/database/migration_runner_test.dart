@@ -36,10 +36,12 @@ void main() {
     }
   });
 
-  test('migration v2 creates all MVP and KBLI tables', () async {
-    final database = await appDatabase.database;
+  test(
+    'database creation includes all MVP, KBLI, and workflow tables',
+    () async {
+      final database = await appDatabase.database;
 
-    final tables = await database.rawQuery('''
+      final tables = await database.rawQuery('''
       SELECT name
       FROM sqlite_master
       WHERE type = 'table'
@@ -47,38 +49,42 @@ void main() {
       ORDER BY name
     ''');
 
-    final tableNames = tables.map((row) => row['name'] as String).toList();
+      final tableNames = tables.map((row) => row['name'] as String).toList();
 
-    expect(
-      tableNames,
-      containsAll(<String>[
-        'clients',
-        'client_addresses',
-        'client_revisions',
-        'client_revision_addresses',
-        'cases',
-        'case_parties',
-        'case_kbli',
-        'parties',
-        'companies',
-        'company_parties',
-        'shareholdings',
-        'capital_structures',
-        'kbli',
-        'kbli_2020',
-        'kbli_2025',
-        'kbli_conversion',
-        'templates',
-        'documents',
-        'document_revisions',
-        'audit_logs',
-      ]),
-    );
+      expect(
+        tableNames,
+        containsAll(<String>[
+          'clients',
+          'client_addresses',
+          'client_revisions',
+          'client_revision_addresses',
+          'cases',
+          'case_parties',
+          'case_kbli',
+          'parties',
+          'companies',
+          'company_parties',
+          'shareholdings',
+          'capital_structures',
+          'kbli',
+          'kbli_2020',
+          'kbli_2025',
+          'kbli_conversion',
+          'kbli_catalog',
+          'kbli_catalog_sources',
+          'templates',
+          'documents',
+          'document_revisions',
+          'audit_logs',
+          'case_workflow_drafts',
+        ]),
+      );
 
-    expect(tableNames, hasLength(20));
-  });
+      expect(tables, hasLength(23));
+    },
+  );
 
-  test('database version is 5 after migration', () async {
+  test('database version is 7 after migration', () async {
     final database = await appDatabase.database;
 
     expect(await database.getVersion(), DatabaseConfig.databaseVersion);
@@ -969,4 +975,581 @@ void main() {
       await upgradedDatabase.close();
     },
   );
+
+  test('database upgrade from v5 to v6 creates workflow drafts and preserves existing data', () async {
+    const migrationRunner = MigrationRunner();
+
+    final v5Database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 5,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (database, version) async {
+          await migrationRunner.migrate(database, 0, version);
+        },
+      ),
+    );
+
+    await v5Database.insert('clients', {
+      'id': 'client-migration-v6-001',
+      'name': 'V6 Migration Test Client',
+      'nationality_code': 'ID',
+      'identity_type': 'nik',
+      'identity_number': '1234567890123456',
+      'birth_date': null,
+      'gender': null,
+      'phone': null,
+      'email': null,
+      'notes': null,
+      'created_at': '2026-01-01T10:00:00.000',
+      'updated_at': '2026-01-01T10:00:00.000',
+    });
+
+    await v5Database.insert('cases', {
+      'id': 'case-migration-v6-001',
+      'client_id': 'client-migration-v6-001',
+      'company_id': null,
+      'type': 'incorporation',
+      'status': 'NEW',
+      'title': 'V6 Migration Test Case',
+      'description': null,
+      'opened_at': null,
+      'closed_at': null,
+      'created_at': '2026-01-01T10:00:00.000',
+      'updated_at': '2026-01-01T10:00:00.000',
+    });
+
+    await v5Database.close();
+
+    final upgradedDatabase = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onUpgrade: (database, oldVersion, newVersion) async {
+          await migrationRunner.migrate(database, oldVersion, newVersion);
+        },
+      ),
+    );
+
+    expect(await upgradedDatabase.getVersion(), 6);
+
+    final cases = await upgradedDatabase.query(
+      'cases',
+      where: 'id = ?',
+      whereArgs: ['case-migration-v6-001'],
+    );
+
+    expect(cases, hasLength(1));
+    expect(cases.single['status'], 'NEW');
+    expect(cases.single['title'], 'V6 Migration Test Case');
+
+    final drafts = await upgradedDatabase.query('case_workflow_drafts');
+    expect(drafts, isEmpty);
+
+    await upgradedDatabase.close();
+  });
+
+  test('Case workflow drafts table has expected schema', () async {
+    final database = await appDatabase.database;
+
+    final columns = await database.rawQuery(
+      'PRAGMA table_info(case_workflow_drafts)',
+    );
+
+    final columnNames = columns.map((row) => row['name'] as String).toSet();
+
+    expect(
+      columnNames,
+      containsAll(<String>[
+        'case_id',
+        'current_step',
+        'completed_steps',
+        'schema_version',
+        'created_at',
+        'last_saved_at',
+      ]),
+    );
+  });
+
+  test('workflow draft rejects invalid Case reference', () async {
+    final database = await appDatabase.database;
+
+    expect(() async {
+      await database.insert('case_workflow_drafts', {
+        'case_id': 'case-does-not-exist',
+        'current_step': 'client',
+        'completed_steps': '[]',
+        'schema_version': 1,
+        'created_at': '2026-10-01T10:00:00.000',
+        'last_saved_at': '2026-10-01T10:00:00.000',
+      });
+    }, throwsA(isA<Exception>()));
+  });
+
+  test('database upgrade from v6 to v7 migrates KBLI catalog and preserves Case data', () async {
+    const migrationRunner = MigrationRunner();
+
+    // 1. Create a version 6 database.
+    final v6Database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (database, version) async {
+          await migrationRunner.migrate(database, 0, version);
+        },
+      ),
+    );
+
+    const timestamp = '2026-10-01T10:00:00.000';
+
+    // 2. Create a Client and Case.
+    await v6Database.insert('clients', {
+      'id': 'client-v7-test-001',
+      'name': 'V7 Migration Test Client',
+      'nationality_code': 'ID',
+      'identity_type': 'nik',
+      'identity_number': '1234567890123456',
+      'birth_date': null,
+      'gender': null,
+      'phone': null,
+      'email': null,
+      'notes': null,
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+
+    await v6Database.insert('cases', {
+      'id': 'case-v7-test-001',
+      'client_id': 'client-v7-test-001',
+      'company_id': null,
+      'type': 'incorporation',
+      'status': 'NEW',
+      'title': 'V7 Migration Test Case',
+      'description': null,
+      'opened_at': null,
+      'closed_at': null,
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+
+    // 3. Insert KBLI 2020 dataset.
+    await v6Database.insert('kbli_2020', {
+      'id': 'dataset-2020-001',
+      'kode': '01234',
+      'judul_id': 'KBLI 2020 Test',
+      'uraian_id': 'KBLI 2020 Description',
+      'judul_en': 'KBLI 2020 Test EN',
+      'uraian_en': 'KBLI 2020 Description EN',
+      'version': '2020',
+      'id_version': 'version-2020',
+      'id_kategori': 'A',
+      'created_at': timestamp,
+      'tags': null,
+    });
+
+    // 4. Insert KBLI 2025 dataset.
+    await v6Database.insert('kbli_2025', {
+      'id': 'dataset-2025-001',
+      'kode': '56789',
+      'judul_id': 'KBLI 2025 Test',
+      'uraian_id': 'KBLI 2025 Description',
+      'judul_en': 'KBLI 2025 Test EN',
+      'uraian_en': 'KBLI 2025 Description EN',
+      'version': '2025',
+      'id_version': 'version-2025',
+      'id_kategori': 'B',
+      'created_at': timestamp,
+      'tags': null,
+    });
+
+    // 5. Insert legacy KBLI record.
+    await v6Database.insert('kbli', {
+      'id': 'legacy-kbli-001',
+      'code': '01234',
+      'title': 'Legacy KBLI Title',
+      'description': 'Legacy KBLI Description',
+      'keywords': null,
+      'level': 5,
+      'parent_id': null,
+      'source': 'local',
+      'source_version': '2020',
+      'is_active': 1,
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+
+    // 6. Insert legacy Case-KBLI relationship.
+    await v6Database.insert('case_kbli', {
+      'id': 'case-kbli-v7-001',
+      'case_id': 'case-v7-test-001',
+      'kbli_id': 'legacy-kbli-001',
+      'sequence': 1,
+      'is_primary': 1,
+      'notes': 'Existing Case KBLI',
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+
+    await v6Database.close();
+
+    // 7. Upgrade database from version 6 to 7.
+    final upgradedDatabase = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 7,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onUpgrade: (database, oldVersion, newVersion) async {
+          await migrationRunner.migrate(database, oldVersion, newVersion);
+        },
+      ),
+    );
+
+    // 8. Verify database version.
+    expect(await upgradedDatabase.getVersion(), 7);
+
+    // 9. Verify KBLI catalog imports.
+    final catalog2020 = await upgradedDatabase.query(
+      'kbli_catalog',
+      where: 'version = ?',
+      whereArgs: ['2020'],
+    );
+
+    final catalog2025 = await upgradedDatabase.query(
+      'kbli_catalog',
+      where: 'version = ?',
+      whereArgs: ['2025'],
+    );
+
+    expect(catalog2020, hasLength(1));
+    expect(catalog2025, hasLength(1));
+
+    expect(catalog2020.single['code'], '01234');
+    expect(catalog2020.single['title_id'], 'KBLI 2020 Test');
+
+    expect(catalog2025.single['code'], '56789');
+    expect(catalog2025.single['title_id'], 'KBLI 2025 Test');
+
+    // 10. Verify source mappings.
+    final sources = await upgradedDatabase.query('kbli_catalog_sources');
+
+    expect(sources, hasLength(3));
+
+    // 11. Verify Case data is preserved.
+    final cases = await upgradedDatabase.query(
+      'cases',
+      where: 'id = ?',
+      whereArgs: ['case-v7-test-001'],
+    );
+
+    expect(cases, hasLength(1));
+    expect(cases.single['title'], 'V7 Migration Test Case');
+    expect(cases.single['status'], 'NEW');
+
+    // 12. Verify migrated Case-KBLI relationship.
+    final caseKbli = await upgradedDatabase.query(
+      'case_kbli',
+      where: 'id = ?',
+      whereArgs: ['case-kbli-v7-001'],
+    );
+
+    expect(caseKbli, hasLength(1));
+
+    final migratedRelation = caseKbli.single;
+
+    expect(migratedRelation['kbli_catalog_id'], 'kbli-2020-01234');
+    expect(migratedRelation['kbli_version'], '2020');
+    expect(migratedRelation['kbli_code_snapshot'], '01234');
+    expect(migratedRelation['kbli_title_snapshot'], 'Legacy KBLI Title');
+    expect(migratedRelation['sequence'], 1);
+    expect(migratedRelation['is_primary'], 1);
+    expect(migratedRelation['notes'], 'Existing Case KBLI');
+
+    // 13. Verify foreign-key integrity.
+    final foreignKeyErrors = await upgradedDatabase.rawQuery(
+      'PRAGMA foreign_key_check',
+    );
+
+    expect(foreignKeyErrors, isEmpty);
+
+    await upgradedDatabase.close();
+  });
+
+  test('database upgrade from v6 to v7 rolls back when legacy KBLI cannot be mapped', () async {
+    const migrationRunner = MigrationRunner();
+
+    // Create version 6 database.
+    final v6Database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (database, version) async {
+          await migrationRunner.migrate(database, 0, version);
+        },
+      ),
+    );
+
+    // Insert legacy KBLI with unsupported version.
+    await v6Database.insert('kbli', {
+      'id': 'legacy-invalid-001',
+      'code': '99999',
+      'title': 'Invalid Legacy KBLI',
+      'description': 'This record cannot be mapped',
+      'keywords': null,
+      'level': 5,
+      'parent_id': null,
+      'source': 'local',
+      'source_version': '2010',
+      'is_active': 1,
+      'created_at': '2026-10-01T10:00:00.000',
+      'updated_at': '2026-10-01T10:00:00.000',
+    });
+
+    await v6Database.close();
+
+    // Upgrade must fail.
+    await expectLater(
+      databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 7,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onUpgrade: (database, oldVersion, newVersion) async {
+            await migrationRunner.migrate(database, oldVersion, newVersion);
+          },
+        ),
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    // Reopen at version 6 to verify rollback.
+    final reopenedDatabase = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+      ),
+    );
+
+    expect(await reopenedDatabase.getVersion(), 6);
+
+    final legacyRows = await reopenedDatabase.query(
+      'kbli',
+      where: 'id = ?',
+      whereArgs: ['legacy-invalid-001'],
+    );
+
+    expect(legacyRows, hasLength(1));
+    expect(legacyRows.single['source_version'], '2010');
+
+    final catalogTables = await reopenedDatabase.rawQuery('''
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name IN ('kbli_catalog', 'kbli_catalog_sources')
+    ''');
+
+    expect(catalogTables, isEmpty);
+
+    await reopenedDatabase.close();
+  });
+
+  test('database upgrade from v6 to v7 rolls back when a Case has multiple primary KBLI', () async {
+    const migrationRunner = MigrationRunner();
+    const timestamp = '2026-10-01T10:00:00.000';
+
+    // Create version 6 database.
+    final v6Database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (database, version) async {
+          await migrationRunner.migrate(database, 0, version);
+        },
+      ),
+    );
+
+    // Create Client.
+    await v6Database.insert('clients', {
+      'id': 'client-multiple-primary-001',
+      'name': 'Multiple Primary Test Client',
+      'nationality_code': 'ID',
+      'identity_type': 'nik',
+      'identity_number': '1234567890123456',
+      'birth_date': null,
+      'gender': null,
+      'phone': null,
+      'email': null,
+      'notes': null,
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+
+    // Create Case.
+    await v6Database.insert('cases', {
+      'id': 'case-multiple-primary-001',
+      'client_id': 'client-multiple-primary-001',
+      'company_id': null,
+      'type': 'incorporation',
+      'status': 'NEW',
+      'title': 'Multiple Primary Test Case',
+      'description': null,
+      'opened_at': null,
+      'closed_at': null,
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+
+    // Insert two KBLI 2020 dataset records.
+    for (final item in [
+      {
+        'id': 'dataset-multiple-001',
+        'kode': '11111',
+        'judul_id': 'KBLI Test One',
+      },
+      {
+        'id': 'dataset-multiple-002',
+        'kode': '22222',
+        'judul_id': 'KBLI Test Two',
+      },
+    ]) {
+      await v6Database.insert('kbli_2020', {
+        ...item,
+        'uraian_id': 'Test Description',
+        'judul_en': 'KBLI Test EN',
+        'uraian_en': 'Test Description EN',
+        'version': '2020',
+        'id_version': 'version-2020',
+        'id_kategori': 'A',
+        'created_at': timestamp,
+        'tags': null,
+      });
+    }
+
+    // Insert matching legacy KBLI records.
+    for (final item in [
+      {
+        'id': 'legacy-multiple-001',
+        'code': '11111',
+        'title': 'Legacy KBLI One',
+      },
+      {
+        'id': 'legacy-multiple-002',
+        'code': '22222',
+        'title': 'Legacy KBLI Two',
+      },
+    ]) {
+      await v6Database.insert('kbli', {
+        ...item,
+        'description': null,
+        'keywords': null,
+        'level': 5,
+        'parent_id': null,
+        'source': 'local',
+        'source_version': '2020',
+        'is_active': 1,
+        'created_at': timestamp,
+        'updated_at': timestamp,
+      });
+    }
+
+    // Insert two primary KBLI relations for the same Case.
+    for (final item in [
+      {'id': 'case-kbli-multiple-001', 'kbli_id': 'legacy-multiple-001'},
+      {'id': 'case-kbli-multiple-002', 'kbli_id': 'legacy-multiple-002'},
+    ]) {
+      await v6Database.insert('case_kbli', {
+        ...item,
+        'case_id': 'case-multiple-primary-001',
+        'sequence': 1,
+        'is_primary': 1,
+        'notes': null,
+        'created_at': timestamp,
+        'updated_at': timestamp,
+      });
+    }
+
+    await v6Database.close();
+
+    // Upgrade must fail because of the unique primary index.
+    await expectLater(
+      databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 7,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onUpgrade: (database, oldVersion, newVersion) async {
+            await migrationRunner.migrate(database, oldVersion, newVersion);
+          },
+        ),
+      ),
+      throwsA(isA<Exception>()),
+    );
+
+    // Reopen at version 6 to verify rollback.
+    final reopenedDatabase = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+      ),
+    );
+
+    expect(await reopenedDatabase.getVersion(), 6);
+
+    // Old Case-KBLI table and its records must remain intact.
+    final relations = await reopenedDatabase.query(
+      'case_kbli',
+      where: 'case_id = ?',
+      whereArgs: ['case-multiple-primary-001'],
+    );
+
+    expect(relations, hasLength(2));
+    expect(relations.every((row) => row['is_primary'] == 1), isTrue);
+
+    // Verify old schema is restored.
+    final columns = await reopenedDatabase.rawQuery(
+      'PRAGMA table_info(case_kbli)',
+    );
+
+    final columnNames = columns.map((row) => row['name'] as String).toSet();
+
+    expect(columnNames, contains('kbli_id'));
+    expect(columnNames, isNot(contains('kbli_catalog_id')));
+
+    // Catalog tables must not remain after rollback.
+    final catalogTables = await reopenedDatabase.rawQuery('''
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name IN ('kbli_catalog', 'kbli_catalog_sources')
+    ''');
+
+    expect(catalogTables, isEmpty);
+
+    await reopenedDatabase.close();
+  });
 }
