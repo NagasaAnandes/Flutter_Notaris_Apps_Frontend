@@ -9,6 +9,9 @@ import '../../domain/enums/document_type.dart';
 import '../bloc/case_detail/case_detail_bloc.dart';
 import '../bloc/case_detail/case_detail_event.dart';
 import '../bloc/case_detail/case_detail_state.dart';
+import '../bloc/case_status/case_status_bloc.dart';
+import '../bloc/case_status/case_status_event.dart';
+import '../bloc/case_status/case_status_state.dart';
 import '../extensions/case_status_extension.dart';
 import '../extensions/case_type_extension.dart';
 
@@ -110,6 +113,11 @@ class _CaseDetailContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _CaseInformationCard(detail: detail),
+              const SizedBox(height: 16),
+              _CaseStatusManagementCard(
+                caseId: caseData.id,
+                currentStatus: caseData.status,
+              ),
               const SizedBox(height: 16),
               _ClientInformationCard(detail: detail),
               const SizedBox(height: 16),
@@ -243,6 +251,164 @@ class _ClientInformationCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CaseStatusManagementCard extends StatelessWidget {
+  final String caseId;
+  final CaseStatus currentStatus;
+
+  const _CaseStatusManagementCard({
+    required this.caseId,
+    required this.currentStatus,
+  });
+
+  Future<void> _confirmStatusChange(
+    BuildContext context,
+    CaseStatus targetStatus,
+  ) async {
+    final isCancellation = targetStatus == CaseStatus.cancelled;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(isCancellation ? 'Batalkan Case?' : 'Ubah Status Case?'),
+          content: Text(
+            isCancellation
+                ? 'Case akan dibatalkan dan tidak dapat dilanjutkan melalui lifecycle normal. Apakah Anda yakin?'
+                : 'Status Case akan diubah dari ${currentStatus.label} menjadi ${targetStatus.label}. Lanjutkan?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Kembali'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(isCancellation ? 'Ya, Batalkan' : 'Konfirmasi'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    context.read<CaseStatusBloc>().add(
+      CaseStatusUpdateSubmitted(caseId: caseId, status: targetStatus),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final availableTransitions = CaseStatus.values
+        .where(currentStatus.canTransitionTo)
+        .toList();
+
+    return BlocConsumer<CaseStatusBloc, CaseStatusState>(
+      listenWhen: (previous, current) {
+        return current.operationSuccess != null &&
+            current.updatedCaseId == caseId &&
+            (previous.operationSuccess != current.operationSuccess ||
+                previous.updatedCaseId != current.updatedCaseId);
+      },
+      listener: (context, state) {
+        context.read<CaseDetailBloc>().add(CaseDetailRequested(caseId: caseId));
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.operationSuccess!),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        context.read<CaseStatusBloc>().add(const CaseStatusOperationReset());
+      },
+      builder: (context, state) {
+        final operationError =
+            state.updatedCaseId == null || state.updatedCaseId == caseId
+            ? state.operationError
+            : null;
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Manajemen Status Case',
+                  style: theme.textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Status saat ini: ${currentStatus.label}',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+
+                if (state.isSubmitting) ...[
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 12),
+                  const Text('Memperbarui status Case...'),
+                ],
+
+                if (operationError != null) ...[
+                  Text(
+                    operationError,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                if (availableTransitions.isEmpty)
+                  Text(
+                    'Tidak ada perubahan status yang tersedia.',
+                    style: theme.textTheme.bodyMedium,
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: availableTransitions.map((targetStatus) {
+                      final isCancellation =
+                          targetStatus == CaseStatus.cancelled;
+
+                      return isCancellation
+                          ? OutlinedButton.icon(
+                              onPressed: state.isSubmitting
+                                  ? null
+                                  : () => _confirmStatusChange(
+                                      context,
+                                      targetStatus,
+                                    ),
+                              icon: const Icon(Icons.cancel_outlined),
+                              label: Text(targetStatus.label),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: theme.colorScheme.error,
+                              ),
+                            )
+                          : FilledButton.icon(
+                              onPressed: state.isSubmitting
+                                  ? null
+                                  : () => _confirmStatusChange(
+                                      context,
+                                      targetStatus,
+                                    ),
+                              icon: const Icon(Icons.arrow_forward),
+                              label: Text(targetStatus.label),
+                            );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
