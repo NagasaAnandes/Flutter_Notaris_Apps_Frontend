@@ -1370,6 +1370,229 @@ void main() {
     await reopenedDatabase.close();
   });
 
+  test('database upgrade from v6 to v7 rolls back when legacy KBLI code is missing from a valid version', () async {
+    const migrationRunner = MigrationRunner();
+    const timestamp = '2026-10-01T10:00:00.000';
+
+    final v6Database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (database, version) async {
+          await migrationRunner.migrate(database, 0, version);
+        },
+      ),
+    );
+
+    // Dataset contains a valid KBLI 2020 code.
+    await v6Database.insert('kbli_2020', {
+      'id': 'dataset-valid-001',
+      'kode': '01234',
+      'judul_id': 'Valid KBLI',
+      'uraian_id': 'Valid description',
+      'judul_en': 'Valid KBLI EN',
+      'uraian_en': 'Valid description EN',
+      'version': '2020',
+      'id_version': 'version-2020',
+      'id_kategori': 'A',
+      'created_at': timestamp,
+      'tags': null,
+    });
+
+    // Legacy record uses a valid version but an unknown code.
+    await v6Database.insert('kbli', {
+      'id': 'legacy-missing-code-001',
+      'code': '99999',
+      'title': 'Missing KBLI',
+      'description': 'Code does not exist in KBLI 2020',
+      'keywords': null,
+      'level': 5,
+      'parent_id': null,
+      'source': 'local',
+      'source_version': '2020',
+      'is_active': 1,
+      'created_at': timestamp,
+      'updated_at': timestamp,
+    });
+
+    await v6Database.close();
+
+    await expectLater(
+      databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 7,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onUpgrade: (database, oldVersion, newVersion) async {
+            await migrationRunner.migrate(database, oldVersion, newVersion);
+          },
+        ),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('1 legacy KBLI records cannot be mapped'),
+        ),
+      ),
+    );
+
+    // Verify rollback.
+    final reopenedDatabase = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+      ),
+    );
+
+    expect(await reopenedDatabase.getVersion(), 6);
+
+    final legacyRows = await reopenedDatabase.query(
+      'kbli',
+      where: 'id = ?',
+      whereArgs: ['legacy-missing-code-001'],
+    );
+
+    expect(legacyRows, hasLength(1));
+    expect(legacyRows.single['source_version'], '2020');
+    expect(legacyRows.single['code'], '99999');
+
+    final catalogTables = await reopenedDatabase.rawQuery('''
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN ('kbli_catalog', 'kbli_catalog_sources')
+      ''');
+
+    expect(catalogTables, isEmpty);
+
+    await reopenedDatabase.close();
+  });
+
+  test('database upgrade from v6 to v7 rolls back when dataset contains duplicate codes', () async {
+    const migrationRunner = MigrationRunner();
+    const timestamp = '2026-10-01T10:00:00.000';
+
+    final v6Database = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+        onCreate: (database, version) async {
+          await migrationRunner.migrate(database, 0, version);
+        },
+      ),
+    );
+
+    // Insert duplicate codes in both KBLI versions.
+    final duplicateDatasets = [
+      {'table': 'kbli_2020', 'version': '2020', 'code': '11111'},
+      {'table': 'kbli_2025', 'version': '2025', 'code': '22222'},
+    ];
+
+    for (final dataset in duplicateDatasets) {
+      final table = dataset['table']!;
+      final version = dataset['version']!;
+      final code = dataset['code']!;
+
+      for (var index = 1; index <= 2; index++) {
+        await v6Database.insert(table, {
+          'id': 'duplicate-$version-$index',
+          'kode': code,
+          'judul_id': 'Duplicate KBLI $index',
+          'uraian_id': 'Description $index',
+          'judul_en': 'Duplicate KBLI EN $index',
+          'uraian_en': 'Description EN $index',
+          'version': version,
+          'id_version': 'version-$version',
+          'id_kategori': 'A',
+          'created_at': timestamp,
+          'tags': null,
+        });
+      }
+    }
+
+    await v6Database.close();
+
+    await expectLater(
+      databaseFactoryFfi.openDatabase(
+        databasePath,
+        options: OpenDatabaseOptions(
+          version: 7,
+          onConfigure: (database) async {
+            await database.execute('PRAGMA foreign_keys = ON');
+          },
+          onUpgrade: (database, oldVersion, newVersion) async {
+            await migrationRunner.migrate(database, oldVersion, newVersion);
+          },
+        ),
+      ),
+      throwsA(
+        isA<StateError>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('duplicate codes detected'),
+            )
+            .having((error) => error.message, 'message', contains('2020:11111'))
+            .having(
+              (error) => error.message,
+              'message',
+              contains('2025:22222'),
+            ),
+      ),
+    );
+
+    // Verify rollback.
+    final reopenedDatabase = await databaseFactoryFfi.openDatabase(
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 6,
+        onConfigure: (database) async {
+          await database.execute('PRAGMA foreign_keys = ON');
+        },
+      ),
+    );
+
+    expect(await reopenedDatabase.getVersion(), 6);
+
+    final rows2020 = await reopenedDatabase.query(
+      'kbli_2020',
+      where: 'kode = ?',
+      whereArgs: ['11111'],
+    );
+
+    final rows2025 = await reopenedDatabase.query(
+      'kbli_2025',
+      where: 'kode = ?',
+      whereArgs: ['22222'],
+    );
+
+    expect(rows2020, hasLength(2));
+    expect(rows2025, hasLength(2));
+
+    final catalogTables = await reopenedDatabase.rawQuery('''
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN ('kbli_catalog', 'kbli_catalog_sources')
+      ''');
+
+    expect(catalogTables, isEmpty);
+
+    await reopenedDatabase.close();
+  });
+
   test('database upgrade from v6 to v7 rolls back when a Case has multiple primary KBLI', () async {
     const migrationRunner = MigrationRunner();
     const timestamp = '2026-10-01T10:00:00.000';

@@ -630,6 +630,36 @@ class MigrationRunner {
   }
 
   Future<void> _migrateKbliCatalogV7(DatabaseExecutor database) async {
+    // 0. Validate duplicate codes within each KBLI version.
+    final duplicateCodes = await database.rawQuery('''
+      SELECT version, code, COUNT(*) AS total
+      FROM (
+        SELECT '2020' AS version, kode AS code
+        FROM kbli_2020
+
+        UNION ALL
+
+        SELECT '2025' AS version, kode AS code
+        FROM kbli_2025
+      )
+      GROUP BY version, code
+      HAVING COUNT(*) > 1
+    ''');
+
+    if (duplicateCodes.isNotEmpty) {
+      final duplicates = duplicateCodes
+          .map((row) {
+            return '${row['version']}:${row['code']} '
+                '(count: ${row['total']})';
+          })
+          .join(', ');
+
+      throw StateError(
+        'KBLI v7 migration aborted: '
+        'duplicate codes detected within the same version: '
+        '$duplicates.',
+      );
+    }
     // 1. Create unified KBLI catalog.
     await database.execute('''
       CREATE TABLE kbli_catalog (
