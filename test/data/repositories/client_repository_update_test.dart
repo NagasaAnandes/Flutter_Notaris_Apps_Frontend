@@ -5,6 +5,7 @@ import 'package:flutter_notaris_apps_frontend/core/database/database.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/client_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/client.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/client_address.dart';
@@ -22,11 +23,105 @@ void main() {
     sqfliteFfiInit();
   });
 
-  setUp(() {
+  Future<void> seedActiveRegionDataset() async {
+    final database = await appDatabase.database;
+
+    await database.insert('region_dataset_metadata', {
+      'id': 'test-region-v1',
+      'source_name': 'Test Dataset',
+      'source_version': '1.0',
+      'source_checksum_sha256': 'test-checksum-v1',
+      'total_provinces': 2,
+      'total_regencies': 2,
+      'total_districts': 2,
+      'total_villages': 2,
+      'status': 'STAGING',
+      'imported_at': '2026-10-01T00:00:00.000',
+    });
+
+    final regions = [
+      {
+        'code': '31',
+        'name': 'DKI Jakarta',
+        'level': 1,
+        'parent_code': null,
+        'region_type': 'PROVINCE',
+      },
+      {
+        'code': '32',
+        'name': 'Jawa Barat',
+        'level': 1,
+        'parent_code': null,
+        'region_type': 'PROVINCE',
+      },
+      {
+        'code': '3171',
+        'name': 'Jakarta Selatan',
+        'level': 2,
+        'parent_code': '31',
+        'region_type': 'CITY',
+      },
+      {
+        'code': '3273',
+        'name': 'Kota Bandung',
+        'level': 2,
+        'parent_code': '32',
+        'region_type': 'CITY',
+      },
+      {
+        'code': '3171010',
+        'name': 'Kebayoran Baru',
+        'level': 3,
+        'parent_code': '3171',
+        'region_type': 'DISTRICT',
+      },
+      {
+        'code': '3273010',
+        'name': 'Bandung Kulon',
+        'level': 3,
+        'parent_code': '3273',
+        'region_type': 'DISTRICT',
+      },
+      {
+        'code': '3171010001',
+        'name': 'Selong',
+        'level': 4,
+        'parent_code': '3171010',
+        'region_type': 'URBAN_VILLAGE',
+      },
+      {
+        'code': '3273010001',
+        'name': 'Caringin',
+        'level': 4,
+        'parent_code': '3273010',
+        'region_type': 'URBAN_VILLAGE',
+      },
+    ];
+
+    for (final region in regions) {
+      await database.insert('administrative_regions', {
+        'dataset_id': 'test-region-v1',
+        ...region,
+        'created_at': '2026-10-01T00:00:00.000',
+      });
+    }
+
+    await database.update(
+      'region_dataset_metadata',
+      {'status': 'ACTIVE', 'activated_at': '2026-10-01T00:00:00.000'},
+      where: 'id = ?',
+      whereArgs: ['test-region-v1'],
+    );
+  }
+
+  setUp(() async {
     appDatabase = AppDatabase(
       databaseFactory: databaseFactoryFfi,
       databasePath: ':memory:',
     );
+
+    await appDatabase.database;
+    await seedActiveRegionDataset();
 
     final clientDataSource = ClientLocalDataSourceImpl(appDatabase);
 
@@ -34,11 +129,14 @@ void main() {
 
     auditLogDataSource = AuditLogLocalDataSourceImpl(appDatabase);
 
+    final regionDataSource = RegionLocalDataSourceImpl(appDatabase);
+
     repository = ClientRepositoryImpl(
       appDatabase,
       clientDataSource,
       revisionDataSource,
       auditLogDataSource,
+      regionDataSource,
     );
   });
 
@@ -74,10 +172,13 @@ void main() {
         clientId: client.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
+        regionDatasetId: 'test-region-v1',
         provinceId: '31',
         regencyId: '3171',
         districtId: '3171010',
         villageId: '3171010001',
+        rt: '001',
+        rw: '002',
         postalCode: '10110',
         addressDetail: 'Jl. Lama No. 1',
         createdAt: oldDate,
@@ -106,6 +207,7 @@ void main() {
         clientId: client.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
+        regionDatasetId: 'test-region-v1',
         provinceId: '32',
         regencyId: '3273',
         districtId: '3273010',
@@ -160,6 +262,13 @@ void main() {
       expect(revisionAddresses.first['address_id'], oldAddress.id);
       expect(revisionAddresses.first['address_detail'], 'Jl. Lama No. 1');
       expect(revisionAddresses.first['province_id'], '31');
+      expect(revisionAddresses.first['region_dataset_id'], 'test-region-v1');
+      expect(revisionAddresses.first['rt'], '001');
+      expect(revisionAddresses.first['rw'], '002');
+      expect(revisionAddresses.first['province_name'], 'DKI Jakarta');
+      expect(revisionAddresses.first['regency_name'], 'Jakarta Selatan');
+      expect(revisionAddresses.first['district_name'], 'Kebayoran Baru');
+      expect(revisionAddresses.first['village_name'], 'Selong');
       expect(revisionAddresses.first['postal_code'], '10110');
 
       final auditLogs = await auditLogDataSource.getByCase('unused-case-id');
@@ -205,6 +314,7 @@ void main() {
         clientId: client.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
+        regionDatasetId: 'test-region-v1',
         provinceId: '31',
         regencyId: '3171',
         districtId: '3171010',
@@ -274,6 +384,7 @@ void main() {
         clientId: client.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
+        regionDatasetId: 'test-region-v1',
         provinceId: '32',
         regencyId: '3273',
         districtId: '3273010',
@@ -351,6 +462,7 @@ void main() {
         clientId: clientA.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
+        regionDatasetId: 'test-region-v1',
         provinceId: '31',
         regencyId: '3171',
         districtId: '3171010',
@@ -414,6 +526,102 @@ void main() {
       expect(auditLogs, isEmpty);
     },
   );
+  test('update client keeps historical address snapshot when region dataset is RETIRED', () async {
+    final oldDate = DateTime(2026, 10, 8, 10, 0);
+    final newDate = DateTime(2026, 10, 8, 11, 0);
+
+    final client = Client(
+      id: 'client-008',
+      name: 'Agus Setiawan',
+      nationalityCode: 'ID',
+      identityType: IdentityType.nik,
+      identityNumber: '3170000000000008',
+      createdAt: oldDate,
+      updatedAt: oldDate,
+    );
+
+    await repository.create(client);
+
+    final oldAddress = ClientAddress(
+      id: 'address-008',
+      clientId: client.id,
+      addressType: AddressType.domicile,
+      countryCode: 'ID',
+      regionDatasetId: 'test-region-v1',
+      provinceId: '31',
+      regencyId: '3171',
+      districtId: '3171010',
+      villageId: '3171010001',
+      rt: '003',
+      rw: '004',
+      postalCode: '10110',
+      addressDetail: 'Jl. Historis No. 8',
+      createdAt: oldDate,
+      updatedAt: oldDate,
+    );
+
+    await repository.addAddress(oldAddress);
+
+    final database = await appDatabase.database;
+
+    final updatedClient = Client(
+      id: client.id,
+      name: 'Agus Setiawan Updated',
+      nationalityCode: client.nationalityCode,
+      identityType: client.identityType,
+      identityNumber: client.identityNumber,
+      createdAt: client.createdAt,
+      updatedAt: newDate,
+    );
+
+    // Alamat lama dihapus dari data aktif, tetapi harus tetap tersimpan
+    // sebagai snapshot revision walaupun dataset-nya sudah RETIRED.
+    await repository.updateClient(client: updatedClient, addresses: const []);
+
+    // Dataset dapat dipensiunkan setelah tidak lagi direferensikan
+    // oleh alamat aktif. Snapshot revision tetap harus tersedia.
+    await database.update(
+      'region_dataset_metadata',
+      {'status': 'RETIRED'},
+      where: 'id = ?',
+      whereArgs: ['test-region-v1'],
+    );
+
+    final currentAddresses = await repository.getAddresses(client.id);
+    expect(currentAddresses, isEmpty);
+
+    final revisions = await revisionDataSource.getRevisions(client.id);
+    expect(revisions, hasLength(1));
+
+    final revisionAddresses = await revisionDataSource.getRevisionAddresses(
+      'client-008-revision-1',
+    );
+
+    expect(revisionAddresses, hasLength(1));
+    expect(revisionAddresses.first['address_id'], oldAddress.id);
+    expect(revisionAddresses.first['region_dataset_id'], 'test-region-v1');
+    expect(revisionAddresses.first['province_id'], '31');
+    expect(revisionAddresses.first['regency_id'], '3171');
+    expect(revisionAddresses.first['district_id'], '3171010');
+    expect(revisionAddresses.first['village_id'], '3171010001');
+    expect(revisionAddresses.first['province_name'], 'DKI Jakarta');
+    expect(revisionAddresses.first['regency_name'], 'Jakarta Selatan');
+    expect(revisionAddresses.first['district_name'], 'Kebayoran Baru');
+    expect(revisionAddresses.first['village_name'], 'Selong');
+    expect(revisionAddresses.first['rt'], '003');
+    expect(revisionAddresses.first['rw'], '004');
+    expect(revisionAddresses.first['postal_code'], '10110');
+    expect(revisionAddresses.first['address_detail'], 'Jl. Historis No. 8');
+
+    final datasetRows = await database.query(
+      'region_dataset_metadata',
+      columns: ['status'],
+      where: 'id = ?',
+      whereArgs: ['test-region-v1'],
+    );
+    expect(datasetRows.single['status'], 'RETIRED');
+  });
+
   test('get client revisions through repository', () async {
     final oldDate = DateTime(2026, 10, 8, 10, 0);
     final newDate = DateTime(2026, 10, 8, 11, 0);
@@ -480,6 +688,7 @@ void main() {
       clientId: client.id,
       addressType: AddressType.domicile,
       countryCode: 'ID',
+      regionDatasetId: 'test-region-v1',
       provinceId: '31',
       regencyId: '3171',
       districtId: '3171010',
@@ -507,6 +716,7 @@ void main() {
       clientId: client.id,
       addressType: AddressType.domicile,
       countryCode: 'ID',
+      regionDatasetId: 'test-region-v1',
       provinceId: '32',
       regencyId: '3273',
       districtId: '3273010',

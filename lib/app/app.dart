@@ -31,21 +31,28 @@ class _NotarisAppState extends State<NotarisApp> {
   Widget build(BuildContext context) {
     final dependencies = widget.dependencies;
 
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider<ClientBloc>.value(value: dependencies.clientBloc),
-        BlocProvider<CaseBloc>.value(value: dependencies.caseBloc),
-        BlocProvider<CaseDetailBloc>.value(value: dependencies.caseDetailBloc),
-        BlocProvider<CaseStatusBloc>.value(value: dependencies.caseStatusBloc),
-        BlocProvider<CaseWorkflowDraftBloc>.value(
-          value: dependencies.caseWorkflowDraftBloc,
+    return RepositoryProvider<AppDependencies>.value(
+      value: dependencies,
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<ClientBloc>.value(value: dependencies.clientBloc),
+          BlocProvider<CaseBloc>.value(value: dependencies.caseBloc),
+          BlocProvider<CaseDetailBloc>.value(
+            value: dependencies.caseDetailBloc,
+          ),
+          BlocProvider<CaseStatusBloc>.value(
+            value: dependencies.caseStatusBloc,
+          ),
+          BlocProvider<CaseWorkflowDraftBloc>.value(
+            value: dependencies.caseWorkflowDraftBloc,
+          ),
+        ],
+        child: MaterialApp(
+          title: 'Notaris Apps',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(useMaterial3: true),
+          home: const AppShell(),
         ),
-      ],
-      child: MaterialApp(
-        title: 'Notaris Apps',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(useMaterial3: true),
-        home: const AppShell(),
       ),
     );
   }

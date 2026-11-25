@@ -40,6 +40,69 @@ void main() {
     });
   }
 
+  Future<void> seedActiveRegionDataset() async {
+    final database = await appDatabase.database;
+
+    await database.insert('region_dataset_metadata', {
+      'id': 'test-region-v1',
+      'source_name': 'Test Dataset',
+      'source_version': '1.0',
+      'source_checksum_sha256': 'test-checksum-v1',
+      'total_provinces': 1,
+      'total_regencies': 1,
+      'total_districts': 1,
+      'total_villages': 1,
+      'status': 'STAGING',
+      'imported_at': '2026-10-01T00:00:00.000',
+    });
+
+    final regions = [
+      {
+        'code': '31',
+        'name': 'DKI Jakarta',
+        'level': 1,
+        'parent_code': null,
+        'region_type': 'PROVINCE',
+      },
+      {
+        'code': '3171',
+        'name': 'Jakarta Selatan',
+        'level': 2,
+        'parent_code': '31',
+        'region_type': 'CITY',
+      },
+      {
+        'code': '3171010',
+        'name': 'Kebayoran Baru',
+        'level': 3,
+        'parent_code': '3171',
+        'region_type': 'DISTRICT',
+      },
+      {
+        'code': '3171010001',
+        'name': 'Selong',
+        'level': 4,
+        'parent_code': '3171010',
+        'region_type': 'URBAN_VILLAGE',
+      },
+    ];
+
+    for (final region in regions) {
+      await database.insert('administrative_regions', {
+        'dataset_id': 'test-region-v1',
+        ...region,
+        'created_at': '2026-10-01T00:00:00.000',
+      });
+    }
+
+    await database.update(
+      'region_dataset_metadata',
+      {'status': 'ACTIVE', 'activated_at': '2026-10-01T00:00:00.000'},
+      where: 'id = ?',
+      whereArgs: ['test-region-v1'],
+    );
+  }
+
   test('insert and get client revisions', () async {
     await createClient();
 
@@ -108,6 +171,7 @@ void main() {
 
   test('insert and get revision addresses', () async {
     await createClient();
+    await seedActiveRegionDataset();
 
     await dataSource.insertRevision({
       'id': 'revision-001',
@@ -126,6 +190,7 @@ void main() {
       'address_id': 'address-001',
       'address_type': 'domicile',
       'country_code': 'ID',
+      'region_dataset_id': 'test-region-v1',
       'province_id': '31',
       'regency_id': '3171',
       'district_id': '3171010',

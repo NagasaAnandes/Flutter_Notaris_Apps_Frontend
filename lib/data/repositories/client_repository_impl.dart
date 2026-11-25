@@ -14,6 +14,7 @@ import '../../domain/repositories/client_repository.dart';
 import '../datasources/local/audit_log_local_datasource.dart';
 import '../datasources/local/client_local_datasource.dart';
 import '../datasources/local/client_revision_local_datasource.dart';
+import '../datasources/local/region_local_datasource.dart';
 import '../models/client_address_model.dart';
 import '../models/client_model.dart';
 
@@ -22,12 +23,14 @@ class ClientRepositoryImpl implements ClientRepository {
   final ClientLocalDataSource _dataSource;
   final ClientRevisionLocalDataSource _revisionDataSource;
   final AuditLogLocalDataSource _auditLogDataSource;
+  final RegionLocalDataSource _regionDataSource;
 
   const ClientRepositoryImpl(
     this._appDatabase,
     this._dataSource,
     this._revisionDataSource,
     this._auditLogDataSource,
+    this._regionDataSource,
   );
 
   @override
@@ -162,16 +165,46 @@ class ClientRepositoryImpl implements ClientRepository {
       for (var index = 0; index < currentAddresses.length; index++) {
         final address = currentAddresses[index];
 
+        // Resolve historical region names using the exact dataset
+        // referenced by the current address.
+        final regionCodes = <String>[
+          if (address.provinceId != null) address.provinceId!,
+          if (address.regencyId != null) address.regencyId!,
+          if (address.districtId != null) address.districtId!,
+          if (address.villageId != null) address.villageId!,
+        ];
+
+        final regionNames = address.regionDatasetId == null
+            ? <String, String>{}
+            : await _regionDataSource.getRegionNames(
+                datasetId: address.regionDatasetId!,
+                regionCodes: regionCodes,
+                executor: transaction,
+              );
+
         await _revisionDataSource.insertRevisionAddress({
           'id': '$revisionId-address-${index + 1}',
           'revision_id': revisionId,
           'address_id': address.id,
           'address_type': address.addressType.name,
           'country_code': address.countryCode,
+
+          // Original region identifiers.
+          'region_dataset_id': address.regionDatasetId,
           'province_id': address.provinceId,
           'regency_id': address.regencyId,
           'district_id': address.districtId,
           'village_id': address.villageId,
+
+          // Historical region names.
+          'province_name': regionNames[address.provinceId],
+          'regency_name': regionNames[address.regencyId],
+          'district_name': regionNames[address.districtId],
+          'village_name': regionNames[address.villageId],
+
+          // Additional address details.
+          'rt': address.rt,
+          'rw': address.rw,
           'foreign_state': address.foreignState,
           'foreign_city': address.foreignCity,
           'postal_code': address.postalCode,

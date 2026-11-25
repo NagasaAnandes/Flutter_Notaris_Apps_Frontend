@@ -36,6 +36,10 @@ class MigrationRunner {
       if (oldVersion < 7 && newVersion >= 7) {
         await _migrateKbliCatalogV7(txn);
       }
+
+      if (oldVersion < 8 && newVersion >= 8) {
+        await _createAdministrativeRegionsV8(txn);
+      }
     });
   }
 
@@ -1005,5 +1009,819 @@ class MigrationRunner {
         'foreign key violations detected.',
       );
     }
+  }
+
+  Future<void> _createAdministrativeRegionsV8(DatabaseExecutor database) async {
+    await database.execute('''
+      CREATE TABLE region_dataset_metadata (
+        id TEXT PRIMARY KEY NOT NULL,
+
+        source_name TEXT NOT NULL,
+        source_version TEXT NOT NULL,
+        source_url TEXT,
+
+        regulation_reference TEXT,
+        source_checksum_sha256 TEXT NOT NULL UNIQUE,
+        source_file_name TEXT,
+
+        total_provinces INTEGER NOT NULL DEFAULT 0,
+        total_regencies INTEGER NOT NULL DEFAULT 0,
+        total_districts INTEGER NOT NULL DEFAULT 0,
+        total_villages INTEGER NOT NULL DEFAULT 0,
+
+        status TEXT NOT NULL DEFAULT 'STAGING',
+
+        imported_at TEXT NOT NULL,
+        activated_at TEXT,
+
+        CHECK (
+          status IN ('STAGING', 'ACTIVE', 'RETIRED')
+        ),
+
+        CHECK (total_provinces >= 0),
+        CHECK (total_regencies >= 0),
+        CHECK (total_districts >= 0),
+        CHECK (total_villages >= 0)
+      )
+    ''');
+
+    // Temporary-in-transaction authorization for dataset replacement.
+    await database.execute('''
+      CREATE TABLE region_dataset_replacement_guard (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+
+        old_dataset_id TEXT NOT NULL UNIQUE,
+        new_dataset_id TEXT NOT NULL UNIQUE,
+
+        CHECK (old_dataset_id != new_dataset_id),
+
+        FOREIGN KEY (old_dataset_id)
+          REFERENCES region_dataset_metadata(id),
+
+        FOREIGN KEY (new_dataset_id)
+          REFERENCES region_dataset_metadata(id)
+      )
+    ''');
+
+    // Extend existing client addresses.
+    await database.execute('''
+      ALTER TABLE client_addresses
+      ADD COLUMN region_dataset_id TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_addresses
+      ADD COLUMN rt TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_addresses
+      ADD COLUMN rw TEXT
+    ''');
+
+    // Extend historical client revision addresses.
+    await database.execute('''
+      ALTER TABLE client_revision_addresses
+      ADD COLUMN region_dataset_id TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_revision_addresses
+      ADD COLUMN rt TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_revision_addresses
+      ADD COLUMN rw TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_revision_addresses
+      ADD COLUMN province_name TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_revision_addresses
+      ADD COLUMN regency_name TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_revision_addresses
+      ADD COLUMN district_name TEXT
+    ''');
+
+    await database.execute('''
+      ALTER TABLE client_revision_addresses
+      ADD COLUMN village_name TEXT
+    ''');
+
+    await database.execute('''
+      CREATE UNIQUE INDEX idx_region_dataset_single_active
+      ON region_dataset_metadata(status)
+      WHERE status = 'ACTIVE'
+    ''');
+
+    await database.execute('''
+      CREATE TABLE administrative_regions (
+        dataset_id TEXT NOT NULL,
+        code TEXT NOT NULL,
+        name TEXT NOT NULL,
+
+        level INTEGER NOT NULL,
+        parent_code TEXT,
+
+        region_type TEXT NOT NULL,
+
+        created_at TEXT NOT NULL,
+
+        PRIMARY KEY (dataset_id, code),
+
+        CHECK (level BETWEEN 1 AND 4),
+
+        CHECK (
+          (level = 1 AND parent_code IS NULL)
+          OR
+          (level BETWEEN 2 AND 4 AND parent_code IS NOT NULL)
+        ),
+
+        CHECK (
+          (level = 1 AND region_type = 'PROVINCE')
+          OR
+          (level = 2 AND region_type IN ('REGENCY', 'CITY'))
+          OR
+          (level = 3 AND region_type = 'DISTRICT')
+          OR
+          (level = 4 AND region_type IN (
+            'VILLAGE',
+            'URBAN_VILLAGE',
+            'CUSTOMARY_VILLAGE'
+          ))
+        ),
+
+        FOREIGN KEY (dataset_id)
+          REFERENCES region_dataset_metadata(id)
+          ON DELETE RESTRICT
+          ON UPDATE CASCADE,
+
+        FOREIGN KEY (dataset_id, parent_code)
+          REFERENCES administrative_regions(dataset_id, code)
+          ON DELETE RESTRICT
+          ON UPDATE CASCADE
+      )
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_regions_dataset_level_name
+      ON administrative_regions(dataset_id, level, name)
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_regions_dataset_parent
+      ON administrative_regions(dataset_id, parent_code)
+    ''');
+
+    await database.execute('''
+      CREATE INDEX idx_regions_dataset_name
+      ON administrative_regions(dataset_id, name)
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_regions_parent_level_insert
+      BEFORE INSERT ON administrative_regions
+      WHEN NEW.level > 1 AND NOT EXISTS (
+        SELECT 1
+        FROM administrative_regions parent
+        WHERE parent.dataset_id = NEW.dataset_id
+          AND parent.code = NEW.parent_code
+          AND parent.level = NEW.level - 1
+      )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Administrative region parent level is invalid'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_regions_parent_level_update
+      BEFORE UPDATE OF dataset_id, code, level, parent_code
+      ON administrative_regions
+      WHEN NEW.level > 1 AND NOT EXISTS (
+        SELECT 1
+        FROM administrative_regions parent
+        WHERE parent.dataset_id = NEW.dataset_id
+          AND parent.code = NEW.parent_code
+          AND parent.level = NEW.level - 1
+      )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Administrative region parent level is invalid'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_regions_child_level_update
+      BEFORE UPDATE OF level ON administrative_regions
+      WHEN EXISTS (
+        SELECT 1
+        FROM administrative_regions child
+        WHERE child.dataset_id = OLD.dataset_id
+          AND child.parent_code = OLD.code
+          AND child.level != NEW.level + 1
+      )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Cannot change region level because it would invalidate child hierarchy'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_regions_staging_insert
+      BEFORE INSERT ON administrative_regions
+      WHEN NOT EXISTS (
+        SELECT 1
+        FROM region_dataset_metadata
+        WHERE id = NEW.dataset_id
+          AND status = 'STAGING'
+      )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Regions can only be inserted into STAGING datasets'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_regions_staging_update
+      BEFORE UPDATE ON administrative_regions
+      WHEN
+        NOT EXISTS (
+          SELECT 1
+          FROM region_dataset_metadata
+          WHERE id = OLD.dataset_id
+            AND status = 'STAGING'
+        )
+        OR
+        NOT EXISTS (
+          SELECT 1
+          FROM region_dataset_metadata
+          WHERE id = NEW.dataset_id
+            AND status = 'STAGING'
+        )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Only STAGING dataset regions can be updated'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_regions_staging_delete
+      BEFORE DELETE ON administrative_regions
+      WHEN NOT EXISTS (
+        SELECT 1
+        FROM region_dataset_metadata
+        WHERE id = OLD.dataset_id
+          AND status = 'STAGING'
+      )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Only STAGING dataset regions can be deleted'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_region_dataset_prevent_retire_in_use
+      BEFORE UPDATE OF status ON region_dataset_metadata
+      WHEN OLD.status = 'ACTIVE'
+        AND NEW.status = 'RETIRED'
+        AND EXISTS (
+          SELECT 1
+          FROM client_addresses
+          WHERE region_dataset_id = OLD.id
+        )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Cannot retire region dataset while current addresses still reference it'
+        );
+      END;
+      CREATE TRIGGER trg_region_dataset_status_transition
+      BEFORE UPDATE OF status ON region_dataset_metadata
+      WHEN NOT (
+        (OLD.status = 'STAGING' AND NEW.status = 'ACTIVE')
+        OR
+        (OLD.status = 'ACTIVE' AND NEW.status = 'RETIRED')
+        OR
+        OLD.status = NEW.status
+      )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Invalid region dataset status transition'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_region_dataset_protected_delete
+      BEFORE DELETE ON region_dataset_metadata
+      WHEN OLD.status IN ('ACTIVE', 'RETIRED')
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Active or retired region datasets cannot be deleted'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_region_dataset_activation_validation
+      BEFORE UPDATE OF status ON region_dataset_metadata
+      WHEN OLD.status = 'STAGING'
+        AND NEW.status = 'ACTIVE'
+      BEGIN
+        SELECT CASE
+          WHEN NEW.activated_at IS NULL
+            OR TRIM(NEW.activated_at) = ''
+          THEN RAISE(
+            ABORT,
+            'Activated dataset requires activated_at'
+          )
+        END;
+        SELECT CASE
+          WHEN (
+            SELECT COUNT(*)
+            FROM administrative_regions
+            WHERE dataset_id = OLD.id AND level = 1
+          ) != NEW.total_provinces
+          THEN RAISE(
+            ABORT,
+            'Region dataset province count does not match metadata'
+          )
+        END;
+
+        SELECT CASE
+          WHEN (
+            SELECT COUNT(*)
+            FROM administrative_regions
+            WHERE dataset_id = OLD.id AND level = 2
+          ) != NEW.total_regencies
+          THEN RAISE(
+            ABORT,
+            'Region dataset regency count does not match metadata'
+          )
+        END;
+
+        SELECT CASE
+          WHEN (
+            SELECT COUNT(*)
+            FROM administrative_regions
+            WHERE dataset_id = OLD.id AND level = 3
+          ) != NEW.total_districts
+          THEN RAISE(
+            ABORT,
+            'Region dataset district count does not match metadata'
+          )
+        END;
+
+        SELECT CASE
+          WHEN (
+            SELECT COUNT(*)
+            FROM administrative_regions
+            WHERE dataset_id = OLD.id AND level = 4
+          ) != NEW.total_villages
+          THEN RAISE(
+            ABORT,
+            'Region dataset village count does not match metadata'
+          )
+        END;
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_region_dataset_immutable
+      BEFORE UPDATE ON region_dataset_metadata
+      WHEN OLD.status IN ('ACTIVE', 'RETIRED')
+        AND (
+          NEW.id IS NOT OLD.id
+          OR NEW.source_name IS NOT OLD.source_name
+          OR NEW.source_version IS NOT OLD.source_version
+          OR NEW.source_url IS NOT OLD.source_url
+          OR NEW.regulation_reference IS NOT OLD.regulation_reference
+          OR NEW.source_checksum_sha256 IS NOT OLD.source_checksum_sha256
+          OR NEW.source_file_name IS NOT OLD.source_file_name
+          OR NEW.total_provinces IS NOT OLD.total_provinces
+          OR NEW.total_regencies IS NOT OLD.total_regencies
+          OR NEW.total_districts IS NOT OLD.total_districts
+          OR NEW.total_villages IS NOT OLD.total_villages
+          OR NEW.imported_at IS NOT OLD.imported_at
+          OR NEW.activated_at IS NOT OLD.activated_at
+        )
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'Active or retired region dataset metadata is immutable'
+        );
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_region_dataset_initial_status
+      BEFORE INSERT ON region_dataset_metadata
+      WHEN NEW.status != 'STAGING'
+      BEGIN
+        SELECT RAISE(
+          ABORT,
+          'New region datasets must start in STAGING status'
+        );
+      END
+    ''');
+
+    // Validate Indonesian administrative hierarchy for current client addresses.
+    await database.execute('''
+      CREATE TRIGGER trg_client_addresses_region_insert
+      BEFORE INSERT ON client_addresses
+      WHEN NEW.region_dataset_id IS NOT NULL
+        OR NEW.province_id IS NOT NULL
+        OR NEW.regency_id IS NOT NULL
+        OR NEW.district_id IS NOT NULL
+        OR NEW.village_id IS NOT NULL
+      BEGIN
+        SELECT CASE
+          WHEN NEW.country_code <> 'ID'
+          THEN RAISE(
+            ABORT,
+            'Foreign address cannot contain Indonesian region references'
+          )
+        END;
+
+        SELECT CASE
+          WHEN NEW.region_dataset_id IS NULL
+          THEN RAISE(ABORT, 'Region dataset is required')
+        END;
+
+        SELECT CASE
+          WHEN NOT EXISTS (
+            SELECT 1
+            FROM region_dataset_metadata
+            WHERE id = NEW.region_dataset_id
+              AND status = 'ACTIVE'
+          )
+          THEN RAISE(ABORT, 'Region dataset is not available')
+        END;
+
+        SELECT CASE
+          WHEN NEW.province_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.province_id
+                AND level = 1
+            )
+          THEN RAISE(ABORT, 'Invalid province reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.regency_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.regency_id
+                AND level = 2
+                AND parent_code = NEW.province_id
+            )
+          THEN RAISE(ABORT, 'Invalid regency reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.district_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.district_id
+                AND level = 3
+                AND parent_code = NEW.regency_id
+            )
+          THEN RAISE(ABORT, 'Invalid district reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.village_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.village_id
+                AND level = 4
+                AND parent_code = NEW.district_id
+            )
+          THEN RAISE(ABORT, 'Invalid village reference')
+        END;
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_client_addresses_region_update
+      BEFORE UPDATE OF
+        country_code,
+        region_dataset_id,
+        province_id,
+        regency_id,
+        district_id,
+        village_id
+      ON client_addresses
+      WHEN (
+        NEW.region_dataset_id IS NOT OLD.region_dataset_id
+        OR NEW.province_id IS NOT OLD.province_id
+        OR NEW.regency_id IS NOT OLD.regency_id
+        OR NEW.district_id IS NOT OLD.district_id
+        OR NEW.village_id IS NOT OLD.village_id
+        OR NEW.country_code IS NOT OLD.country_code
+      )
+      BEGIN
+        -- Foreign address must not retain Indonesian region references.
+        SELECT CASE
+          WHEN NEW.country_code <> 'ID'
+            AND (
+              NEW.region_dataset_id IS NOT NULL
+              OR NEW.province_id IS NOT NULL
+              OR NEW.regency_id IS NOT NULL
+              OR NEW.district_id IS NOT NULL
+              OR NEW.village_id IS NOT NULL
+            )
+          THEN RAISE(
+            ABORT,
+            'Foreign address cannot contain Indonesian region references'
+          )
+        END;
+
+        -- Indonesian address with region references requires a dataset.
+        SELECT CASE
+          WHEN NEW.country_code = 'ID'
+            AND NEW.region_dataset_id IS NULL
+            AND (
+              NEW.province_id IS NOT NULL
+              OR NEW.regency_id IS NOT NULL
+              OR NEW.district_id IS NOT NULL
+              OR NEW.village_id IS NOT NULL
+            )
+          THEN RAISE(ABORT, 'Region dataset is required')
+        END;
+
+        -- Dataset must be ACTIVE, except during controlled replacement.
+        SELECT CASE
+          WHEN NEW.country_code = 'ID'
+            AND NEW.region_dataset_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM region_dataset_metadata
+              WHERE id = NEW.region_dataset_id
+                AND status = 'ACTIVE'
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM region_dataset_replacement_guard guard
+              JOIN region_dataset_metadata old_dataset
+                ON old_dataset.id = guard.old_dataset_id
+              JOIN region_dataset_metadata new_dataset
+                ON new_dataset.id = guard.new_dataset_id
+              WHERE guard.old_dataset_id = OLD.region_dataset_id
+                AND guard.new_dataset_id = NEW.region_dataset_id
+                AND old_dataset.status = 'ACTIVE'
+                AND new_dataset.status = 'STAGING'
+            )
+          THEN RAISE(ABORT, 'Region dataset is not available')
+        END;
+
+        SELECT CASE
+          WHEN NEW.country_code = 'ID'
+            AND NEW.province_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.province_id
+                AND level = 1
+            )
+          THEN RAISE(ABORT, 'Invalid province reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.country_code = 'ID'
+            AND NEW.regency_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.regency_id
+                AND level = 2
+                AND parent_code = NEW.province_id
+            )
+          THEN RAISE(ABORT, 'Invalid regency reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.country_code = 'ID'
+            AND NEW.district_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.district_id
+                AND level = 3
+                AND parent_code = NEW.regency_id
+            )
+          THEN RAISE(ABORT, 'Invalid district reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.country_code = 'ID'
+            AND NEW.village_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.village_id
+                AND level = 4
+                AND parent_code = NEW.district_id
+            )
+          THEN RAISE(ABORT, 'Invalid village reference')
+        END;
+      END
+    ''');
+
+    // Validate historical client revision addresses.
+    await database.execute('''
+      CREATE TRIGGER trg_client_revision_addresses_region_insert
+      BEFORE INSERT ON client_revision_addresses
+      WHEN NEW.region_dataset_id IS NOT NULL
+        OR NEW.province_id IS NOT NULL
+        OR NEW.regency_id IS NOT NULL
+        OR NEW.district_id IS NOT NULL
+        OR NEW.village_id IS NOT NULL
+      BEGIN
+        SELECT CASE
+          WHEN NEW.region_dataset_id IS NULL
+          THEN RAISE(ABORT, 'Region dataset is required')
+        END;
+
+        SELECT CASE
+          WHEN NOT EXISTS (
+            SELECT 1
+            FROM region_dataset_metadata
+            WHERE id = NEW.region_dataset_id
+              AND status IN ('ACTIVE', 'RETIRED')
+          )
+          THEN RAISE(ABORT, 'Region dataset is not available')
+        END;
+
+        SELECT CASE
+          WHEN NEW.province_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.province_id
+                AND level = 1
+            )
+          THEN RAISE(ABORT, 'Invalid province reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.regency_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.regency_id
+                AND level = 2
+                AND parent_code = NEW.province_id
+            )
+          THEN RAISE(ABORT, 'Invalid regency reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.district_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.district_id
+                AND level = 3
+                AND parent_code = NEW.regency_id
+            )
+          THEN RAISE(ABORT, 'Invalid district reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.village_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.village_id
+                AND level = 4
+                AND parent_code = NEW.district_id
+            )
+          THEN RAISE(ABORT, 'Invalid village reference')
+        END;
+      END
+    ''');
+
+    await database.execute('''
+      CREATE TRIGGER trg_client_revision_addresses_region_update
+      BEFORE UPDATE OF
+        region_dataset_id,
+        province_id,
+        regency_id,
+        district_id,
+        village_id
+      ON client_revision_addresses
+      WHEN NEW.region_dataset_id IS NOT NULL
+        OR NEW.province_id IS NOT NULL
+        OR NEW.regency_id IS NOT NULL
+        OR NEW.district_id IS NOT NULL
+        OR NEW.village_id IS NOT NULL
+      BEGIN
+        SELECT CASE
+          WHEN NEW.region_dataset_id IS NULL
+          THEN RAISE(ABORT, 'Region dataset is required')
+        END;
+
+        SELECT CASE
+          WHEN NOT EXISTS (
+            SELECT 1
+            FROM region_dataset_metadata
+            WHERE id = NEW.region_dataset_id
+              AND status IN ('ACTIVE', 'RETIRED')
+          )
+          THEN RAISE(ABORT, 'Region dataset is not available')
+        END;
+
+        SELECT CASE
+          WHEN NEW.province_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.province_id
+                AND level = 1
+            )
+          THEN RAISE(ABORT, 'Invalid province reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.regency_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.regency_id
+                AND level = 2
+                AND parent_code = NEW.province_id
+            )
+          THEN RAISE(ABORT, 'Invalid regency reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.district_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.district_id
+                AND level = 3
+                AND parent_code = NEW.regency_id
+            )
+          THEN RAISE(ABORT, 'Invalid district reference')
+        END;
+
+        SELECT CASE
+          WHEN NEW.village_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM administrative_regions
+              WHERE dataset_id = NEW.region_dataset_id
+                AND code = NEW.village_id
+                AND level = 4
+                AND parent_code = NEW.district_id
+            )
+          THEN RAISE(ABORT, 'Invalid village reference')
+        END;
+      END
+    ''');
   }
 }

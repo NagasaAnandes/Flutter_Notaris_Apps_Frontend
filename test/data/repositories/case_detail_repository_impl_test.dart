@@ -11,6 +11,7 @@ import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_loca
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/document_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/document_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 
 import 'package:flutter_notaris_apps_frontend/data/repositories/case_detail_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/case_repository_impl.dart';
@@ -50,6 +51,7 @@ void main() {
       ClientLocalDataSourceImpl(appDatabase),
       ClientRevisionLocalDataSourceImpl(appDatabase),
       AuditLogLocalDataSourceImpl(appDatabase),
+      RegionLocalDataSourceImpl(appDatabase),
     );
 
     caseRepository = CaseRepositoryImpl(

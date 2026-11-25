@@ -11,6 +11,7 @@ import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_loca
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/document_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/document_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 
 import 'package:flutter_notaris_apps_frontend/data/repositories/case_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/client_detail_repository_impl.dart';
@@ -41,7 +42,7 @@ void main() {
   late DocumentRepositoryImpl documentRepository;
   late ClientDetailRepositoryImpl repository;
 
-  setUp(() {
+  setUp(() async {
     appDatabase = AppDatabase(
       databaseFactory: databaseFactoryFfi,
       databasePath: ':memory:',
@@ -52,6 +53,7 @@ void main() {
       ClientLocalDataSourceImpl(appDatabase),
       ClientRevisionLocalDataSourceImpl(appDatabase),
       AuditLogLocalDataSourceImpl(appDatabase),
+      RegionLocalDataSourceImpl(appDatabase),
     );
 
     caseRepository = CaseRepositoryImpl(
@@ -98,10 +100,6 @@ void main() {
         clientId: client.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
-        provinceId: '31',
-        regencyId: '3173',
-        districtId: '3173010',
-        villageId: '3173010001',
         postalCode: '10110',
         addressDetail: 'Jl. Detail No. 1',
         createdAt: DateTime(2026, 10, 8, 9),

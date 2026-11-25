@@ -13,6 +13,7 @@ import 'package:flutter_notaris_apps_frontend/data/datasources/local/case_local_
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/case_party_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 
 import 'package:flutter_notaris_apps_frontend/data/repositories/case_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/client_repository_impl.dart';
@@ -72,6 +73,7 @@ void main() {
       clientDataSource,
       clientRevisionDataSource,
       auditLogDataSource,
+      RegionLocalDataSourceImpl(appDatabase),
     );
 
     caseRepository = CaseRepositoryImpl(

@@ -8,5 +8,6 @@ class DatabaseConfig {
   /// Version 5 introduces standardized Case status codes.
   /// Version 6 introduces Case workflow draft persistence.
   /// Version 7 introduces unified KBLI catalog and Case KBLI snapshots.
-  static const int databaseVersion = 7;
+  /// Version 8 introduces administrative region datasets and lifecycle.
+  static const int databaseVersion = 8;
 }

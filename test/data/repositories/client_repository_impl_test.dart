@@ -12,6 +12,7 @@ import 'package:flutter_notaris_apps_frontend/domain/enums/address_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/filters/client_filter.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 
 void main() {
   late AppDatabase appDatabase;
@@ -21,21 +22,89 @@ void main() {
     sqfliteFfiInit();
   });
 
-  setUp(() {
+  setUp(() async {
     appDatabase = AppDatabase(
       databaseFactory: databaseFactoryFfi,
       databasePath: ':memory:',
     );
 
+    final database = await appDatabase.database;
+
+    // AppDatabase sudah menjalankan migrasi hingga V8.
+    // Siapkan dataset wilayah khusus untuk pengujian repository.
+    await database.insert('region_dataset_metadata', {
+      'id': 'dataset-test',
+      'source_name': 'Repository Test Dataset',
+      'source_version': '2026-test',
+      'source_checksum_sha256': 'd' * 64,
+      'source_file_name': 'repository-test-regions.csv',
+      'total_provinces': 1,
+      'total_regencies': 1,
+      'total_districts': 1,
+      'total_villages': 1,
+      'status': 'STAGING',
+      'imported_at': '2026-01-01T00:00:00.000Z',
+    });
+
+    // Masukkan hierarki ketika dataset masih STAGING.
+    await database.insert('administrative_regions', {
+      'dataset_id': 'dataset-test',
+      'code': '31',
+      'name': 'DKI JAKARTA',
+      'level': 1,
+      'region_type': 'PROVINCE',
+      'created_at': '2026-01-01',
+    });
+
+    await database.insert('administrative_regions', {
+      'dataset_id': 'dataset-test',
+      'code': '3171',
+      'name': 'JAKARTA SELATAN',
+      'level': 2,
+      'parent_code': '31',
+      'region_type': 'REGENCY',
+      'created_at': '2026-01-01',
+    });
+
+    await database.insert('administrative_regions', {
+      'dataset_id': 'dataset-test',
+      'code': '3171010',
+      'name': 'KEBAYORAN BARU',
+      'level': 3,
+      'parent_code': '3171',
+      'region_type': 'DISTRICT',
+      'created_at': '2026-01-01',
+    });
+
+    await database.insert('administrative_regions', {
+      'dataset_id': 'dataset-test',
+      'code': '3171010001',
+      'name': 'SELONG',
+      'level': 4,
+      'parent_code': '3171010',
+      'region_type': 'VILLAGE',
+      'created_at': '2026-01-01',
+    });
+
+    // Aktifkan dataset setelah seluruh hierarki selesai dimasukkan.
+    await database.update(
+      'region_dataset_metadata',
+      {'status': 'ACTIVE', 'activated_at': '2026-01-02T00:00:00.000Z'},
+      where: 'id = ?',
+      whereArgs: ['dataset-test'],
+    );
+
     final dataSource = ClientLocalDataSourceImpl(appDatabase);
     final revisionDataSource = ClientRevisionLocalDataSourceImpl(appDatabase);
     final auditLogDataSource = AuditLogLocalDataSourceImpl(appDatabase);
+    final regionDataSource = RegionLocalDataSourceImpl(appDatabase);
 
     repository = ClientRepositoryImpl(
       appDatabase,
       dataSource,
       revisionDataSource,
       auditLogDataSource,
+      regionDataSource,
     );
   });
 
@@ -133,6 +202,7 @@ void main() {
     final address = ClientAddress(
       id: 'address-001',
       clientId: client.id,
+      regionDatasetId: 'dataset-test',
       addressType: AddressType.domicile,
       countryCode: 'ID',
       provinceId: '31',
@@ -424,6 +494,7 @@ void main() {
         clientId: clientB.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
+        regionDatasetId: 'dataset-test',
         provinceId: '31',
         regencyId: '3171',
         districtId: '3171010',
@@ -443,6 +514,7 @@ void main() {
         clientId: clientA.id,
         addressType: addressB.addressType,
         countryCode: addressB.countryCode,
+        regionDatasetId: addressB.regionDatasetId,
         provinceId: addressB.provinceId,
         regencyId: addressB.regencyId,
         districtId: addressB.districtId,
@@ -500,6 +572,7 @@ void main() {
         clientId: clientB.id,
         addressType: AddressType.domicile,
         countryCode: 'ID',
+        regionDatasetId: 'dataset-test',
         provinceId: '31',
         regencyId: '3171',
         districtId: '3171010',

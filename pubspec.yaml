@@ -9,6 +9,7 @@ environment:
 dependencies:
   bloc_concurrency: ^0.3.0
   bloc_test: ^10.0.0
+  crypto: ^3.0.8
   csv: ^8.0.0
   flutter:
     sdk: flutter
@@ -31,3 +32,4 @@ flutter:
 
   assets:
     - assets/data/kbli/
+    - assets/data/regions/

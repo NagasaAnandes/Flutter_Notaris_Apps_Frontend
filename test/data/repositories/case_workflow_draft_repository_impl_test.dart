@@ -9,6 +9,7 @@ import 'package:flutter_notaris_apps_frontend/data/datasources/local/case_party_
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/case_workflow_draft_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/case_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/case_workflow_draft_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/client_repository_impl.dart';
@@ -48,6 +49,7 @@ void main() {
       ClientLocalDataSourceImpl(appDatabase),
       ClientRevisionLocalDataSourceImpl(appDatabase),
       AuditLogLocalDataSourceImpl(appDatabase),
+      RegionLocalDataSourceImpl(appDatabase),
     );
 
     draftRepository = CaseWorkflowDraftRepositoryImpl(

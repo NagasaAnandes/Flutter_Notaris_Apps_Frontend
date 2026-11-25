@@ -2,15 +2,19 @@ import 'package:flutter_notaris_apps_frontend/core/database/database.dart';
 import 'package:sqflite_common/sqflite.dart';
 
 import '../../data/importers/kbli/kbli_csv_importer.dart';
+import '../../data/importers/regions/region_dataset_manager.dart';
 
 class DatabaseInitializer {
-  const DatabaseInitializer({
+  DatabaseInitializer({
     required AppDatabase database,
     required KbliCsvImporter kbliCsvImporter,
+    RegionDatasetManager? regionDatasetManager,
     // ignore: prefer_initializing_formals
   }) : _database = database,
        // ignore: prefer_initializing_formals
-       _kbliCsvImporter = kbliCsvImporter;
+       _kbliCsvImporter = kbliCsvImporter,
+       // ignore: prefer_initializing_formals
+       _regionDatasetManager = regionDatasetManager;
 
   static const int expectedKbli2020Count = 2687;
   static const int expectedKbli2025Count = 2422;
@@ -18,6 +22,7 @@ class DatabaseInitializer {
 
   final AppDatabase _database;
   final KbliCsvImporter _kbliCsvImporter;
+  final RegionDatasetManager? _regionDatasetManager;
 
   Future<Database> initialize() async {
     final database = await _database.database;
@@ -41,7 +46,57 @@ class DatabaseInitializer {
 
     await _synchronizeUnifiedCatalog(database);
 
+    await _initializeRegionDataset();
+
     return database;
+  }
+
+  Future<void> _initializeRegionDataset() async {
+    final manager = _regionDatasetManager;
+
+    // Region initialization is skipped when no manager is injected.
+    // Production startup must explicitly provide the manager.
+    if (manager == null) {
+      return;
+    }
+
+    final activeDataset = await manager.getActiveDataset();
+
+    if (activeDataset != null) {
+      return;
+    }
+
+    const datasetId = 'administrative-regions-2025';
+
+    final existingDataset = await manager.getDatasetById(datasetId);
+
+    if (existingDataset != null) {
+      final status = existingDataset['status'];
+
+      if (status != 'STAGING') {
+        throw StateError(
+          'Initial region dataset "$datasetId" already exists '
+          'with unexpected status "$status". '
+          'Automatic recovery is only allowed for STAGING datasets.',
+        );
+      }
+
+      // Recover a previously committed STAGING dataset.
+      await manager.validateStagingDataset(datasetId);
+      await manager.activateDataset(datasetId);
+
+      return;
+    }
+
+    await manager.stageDataset(
+      datasetId: datasetId,
+      sourceName: 'Cahyadsn Administrative Regions',
+      sourceVersion: '2025',
+      sourceUrl: null,
+      regulationReference: 'Kepmendagri 300.2.2-2138/2025',
+    );
+
+    await manager.activateDataset(datasetId);
   }
 
   Future<void> _synchronizeUnifiedCatalog(Database database) async {

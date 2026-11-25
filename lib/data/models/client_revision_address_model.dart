@@ -7,10 +7,21 @@ class ClientRevisionAddressModel {
   final String addressId;
   final AddressType addressType;
   final String countryCode;
+
+  final String? regionDatasetId;
   final String? provinceId;
   final String? regencyId;
   final String? districtId;
   final String? villageId;
+
+  final String? rt;
+  final String? rw;
+
+  final String? provinceName;
+  final String? regencyName;
+  final String? districtName;
+  final String? villageName;
+
   final String? foreignState;
   final String? foreignCity;
   final String? postalCode;
@@ -23,10 +34,17 @@ class ClientRevisionAddressModel {
     required this.addressId,
     required this.addressType,
     required this.countryCode,
+    this.regionDatasetId,
     this.provinceId,
     this.regencyId,
     this.districtId,
     this.villageId,
+    this.rt,
+    this.rw,
+    this.provinceName,
+    this.regencyName,
+    this.districtName,
+    this.villageName,
     this.foreignState,
     this.foreignCity,
     this.postalCode,
@@ -41,10 +59,17 @@ class ClientRevisionAddressModel {
       addressId: map['address_id'] as String,
       addressType: AddressType.values.byName(map['address_type'] as String),
       countryCode: map['country_code'] as String,
+      regionDatasetId: map['region_dataset_id'] as String?,
       provinceId: map['province_id'] as String?,
       regencyId: map['regency_id'] as String?,
       districtId: map['district_id'] as String?,
       villageId: map['village_id'] as String?,
+      rt: map['rt'] as String?,
+      rw: map['rw'] as String?,
+      provinceName: map['province_name'] as String?,
+      regencyName: map['regency_name'] as String?,
+      districtName: map['district_name'] as String?,
+      villageName: map['village_name'] as String?,
       foreignState: map['foreign_state'] as String?,
       foreignCity: map['foreign_city'] as String?,
       postalCode: map['postal_code'] as String?,
@@ -60,10 +85,17 @@ class ClientRevisionAddressModel {
       addressId: entity.addressId,
       addressType: entity.addressType,
       countryCode: entity.countryCode,
+      regionDatasetId: entity.regionDatasetId,
       provinceId: entity.provinceId,
       regencyId: entity.regencyId,
       districtId: entity.districtId,
       villageId: entity.villageId,
+      rt: entity.rt,
+      rw: entity.rw,
+      provinceName: entity.provinceName,
+      regencyName: entity.regencyName,
+      districtName: entity.districtName,
+      villageName: entity.villageName,
       foreignState: entity.foreignState,
       foreignCity: entity.foreignCity,
       postalCode: entity.postalCode,
@@ -79,10 +111,17 @@ class ClientRevisionAddressModel {
       'address_id': addressId,
       'address_type': addressType.name,
       'country_code': countryCode,
+      'region_dataset_id': regionDatasetId,
       'province_id': provinceId,
       'regency_id': regencyId,
       'district_id': districtId,
       'village_id': villageId,
+      'rt': rt,
+      'rw': rw,
+      'province_name': provinceName,
+      'regency_name': regencyName,
+      'district_name': districtName,
+      'village_name': villageName,
       'foreign_state': foreignState,
       'foreign_city': foreignCity,
       'postal_code': postalCode,
@@ -98,10 +137,17 @@ class ClientRevisionAddressModel {
       addressId: addressId,
       addressType: addressType,
       countryCode: countryCode,
+      regionDatasetId: regionDatasetId,
       provinceId: provinceId,
       regencyId: regencyId,
       districtId: districtId,
       villageId: villageId,
+      rt: rt,
+      rw: rw,
+      provinceName: provinceName,
+      regencyName: regencyName,
+      districtName: districtName,
+      villageName: villageName,
       foreignState: foreignState,
       foreignCity: foreignCity,
       postalCode: postalCode,

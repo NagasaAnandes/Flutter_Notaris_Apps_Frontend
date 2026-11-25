@@ -8,12 +8,14 @@ import '../data/datasources/local/client_revision_local_datasource_impl.dart';
 import '../data/datasources/local/case_workflow_draft_local_datasource_impl.dart';
 import '../data/datasources/local/document_local_datasource_impl.dart';
 import '../data/datasources/local/document_revision_local_datasource_impl.dart';
+import '../data/datasources/local/region_local_datasource_impl.dart';
 import '../data/repositories/case_repository_impl.dart';
 import '../data/repositories/case_detail_repository_impl.dart';
 import '../data/repositories/client_detail_repository_impl.dart';
 import '../data/repositories/client_repository_impl.dart';
 import '../data/repositories/case_workflow_draft_repository_impl.dart';
 import '../data/repositories/document_repository_impl.dart';
+import '../data/importers/regions/region_dataset_manager.dart';
 import '../domain/repositories/case_repository.dart';
 import '../domain/repositories/case_detail_repository.dart';
 import '../domain/repositories/client_detail_repository.dart';
@@ -26,12 +28,16 @@ import '../presentation/bloc/case_workflow_draft/case_workflow_draft_bloc.dart';
 import '../presentation/bloc/client/client_bloc.dart';
 
 class AppDependencies {
-  AppDependencies(AppDatabase database) : _database = database {
+  AppDependencies(AppDatabase database, {required this.regionDatasetManager})
+    : _database = database {
     final clientDataSource = ClientLocalDataSourceImpl(database);
     final clientRevisionDataSource = ClientRevisionLocalDataSourceImpl(
       database,
     );
     final auditLogDataSource = AuditLogLocalDataSourceImpl(database);
+    regionLocalDataSource = RegionLocalDataSourceImpl(database);
+
+    final regionDataSource = regionLocalDataSource;
 
     final caseDataSource = CaseLocalDataSourceImpl(database);
     final casePartyDataSource = CasePartyLocalDataSourceImpl(database);
@@ -50,6 +56,7 @@ class AppDependencies {
       clientDataSource,
       clientRevisionDataSource,
       auditLogDataSource,
+      regionDataSource,
     );
 
     caseRepository = CaseRepositoryImpl(
@@ -94,6 +101,9 @@ class AppDependencies {
   }
 
   final AppDatabase _database;
+  final RegionDatasetManager regionDatasetManager;
+
+  late final RegionLocalDataSourceImpl regionLocalDataSource;
 
   late final ClientRepository clientRepository;
   late final CaseRepository caseRepository;

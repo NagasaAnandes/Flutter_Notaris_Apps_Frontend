@@ -7,6 +7,9 @@ import 'package:flutter_notaris_apps_frontend/data/datasources/local/case_local_
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/case_party_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/party_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/case_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/client_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/party_repository_impl.dart';
@@ -23,8 +26,6 @@ import 'package:flutter_notaris_apps_frontend/domain/enums/gender.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/identity_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/enums/party_type.dart';
 import 'package:flutter_notaris_apps_frontend/domain/filters/case_list_query.dart';
-import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
-import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
 
 void main() {
   late AppDatabase appDatabase;
@@ -59,6 +60,7 @@ void main() {
       ClientLocalDataSourceImpl(appDatabase),
       ClientRevisionLocalDataSourceImpl(appDatabase),
       AuditLogLocalDataSourceImpl(appDatabase),
+      RegionLocalDataSourceImpl(appDatabase),
     );
 
     partyRepository = PartyRepositoryImpl(

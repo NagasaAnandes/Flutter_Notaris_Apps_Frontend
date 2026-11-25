@@ -5,6 +5,7 @@ import 'package:flutter_notaris_apps_frontend/core/database/database.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/audit_log_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/datasources/local/client_revision_local_datasource_impl.dart';
+import 'package:flutter_notaris_apps_frontend/data/datasources/local/region_local_datasource_impl.dart';
 import 'package:flutter_notaris_apps_frontend/data/repositories/client_repository_impl.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/client.dart';
 import 'package:flutter_notaris_apps_frontend/domain/entities/client_address.dart';
@@ -17,17 +18,26 @@ void main() {
   late AppDatabase appDatabase;
   late ClientRepositoryImpl repository;
 
-  setUp(() {
+  setUp(() async {
     appDatabase = AppDatabase(
       databaseFactory: databaseFactoryFfi,
       databasePath: ':memory:',
     );
 
+    // AppDatabase sudah menjalankan seluruh migrasi hingga V8.
+    // Tidak perlu menambahkan kolom client_addresses secara manual.
+
+    final clientDataSource = ClientLocalDataSourceImpl(appDatabase);
+    final revisionDataSource = ClientRevisionLocalDataSourceImpl(appDatabase);
+    final auditLogDataSource = AuditLogLocalDataSourceImpl(appDatabase);
+    final regionDataSource = RegionLocalDataSourceImpl(appDatabase);
+
     repository = ClientRepositoryImpl(
       appDatabase,
-      ClientLocalDataSourceImpl(appDatabase),
-      ClientRevisionLocalDataSourceImpl(appDatabase),
-      AuditLogLocalDataSourceImpl(appDatabase),
+      clientDataSource,
+      revisionDataSource,
+      auditLogDataSource,
+      regionDataSource,
     );
   });
 
