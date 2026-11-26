@@ -10,6 +10,7 @@ import '../presentation/bloc/case_detail/case_detail_bloc.dart';
 import '../presentation/bloc/client/client_bloc.dart';
 import '../presentation/bloc/case_status/case_status_bloc.dart';
 import '../presentation/bloc/case_workflow_draft/case_workflow_draft_bloc.dart';
+import '../presentation/bloc/kbli/kbli_bloc.dart';
 
 class NotarisApp extends StatefulWidget {
   final AppDependencies dependencies;
@@ -46,6 +47,7 @@ class _NotarisAppState extends State<NotarisApp> {
           BlocProvider<CaseWorkflowDraftBloc>.value(
             value: dependencies.caseWorkflowDraftBloc,
           ),
+          BlocProvider<KbliBloc>.value(value: dependencies.kbliBloc),
         ],
         child: MaterialApp(
           title: 'Notaris Apps',

@@ -26,6 +26,10 @@ import '../presentation/bloc/case_detail/case_detail_bloc.dart';
 import '../presentation/bloc/case_status/case_status_bloc.dart';
 import '../presentation/bloc/case_workflow_draft/case_workflow_draft_bloc.dart';
 import '../presentation/bloc/client/client_bloc.dart';
+import '../data/datasources/local/kbli_local_datasource_impl.dart';
+import '../data/repositories/kbli_repository_impl.dart';
+import '../domain/repositories/kbli_repository.dart';
+import '../presentation/bloc/kbli/kbli_bloc.dart';
 
 class AppDependencies {
   AppDependencies(AppDatabase database, {required this.regionDatasetManager})
@@ -42,6 +46,7 @@ class AppDependencies {
     final caseDataSource = CaseLocalDataSourceImpl(database);
     final casePartyDataSource = CasePartyLocalDataSourceImpl(database);
     final caseKbliDataSource = CaseKbliLocalDataSourceImpl(database);
+    final kbliDataSource = KbliLocalDataSourceImpl(database);
     final caseWorkflowDraftDataSource = CaseWorkflowDraftLocalDataSourceImpl(
       database,
     );
@@ -66,6 +71,8 @@ class AppDependencies {
       caseKbliDataSource,
       auditLogDataSource,
     );
+
+    kbliRepository = KbliRepositoryImpl(kbliDataSource);
 
     caseWorkflowDraftRepository = CaseWorkflowDraftRepositoryImpl(
       database,
@@ -98,6 +105,8 @@ class AppDependencies {
     caseStatusBloc = CaseStatusBloc(caseRepository);
 
     caseWorkflowDraftBloc = CaseWorkflowDraftBloc(caseWorkflowDraftRepository);
+
+    kbliBloc = KbliBloc(kbliRepository);
   }
 
   final AppDatabase _database;
@@ -107,6 +116,7 @@ class AppDependencies {
 
   late final ClientRepository clientRepository;
   late final CaseRepository caseRepository;
+  late final KbliRepository kbliRepository;
   late final CaseWorkflowDraftRepository caseWorkflowDraftRepository;
   late final ClientDetailRepository clientDetailRepository;
   late final CaseDetailRepository caseDetailRepository;
@@ -116,6 +126,7 @@ class AppDependencies {
   late final CaseDetailBloc caseDetailBloc;
   late final CaseStatusBloc caseStatusBloc;
   late final CaseWorkflowDraftBloc caseWorkflowDraftBloc;
+  late final KbliBloc kbliBloc;
 
   Future<void>? _disposeFuture;
 
@@ -131,6 +142,7 @@ class AppDependencies {
     await caseDetailBloc.close();
     await caseStatusBloc.close();
     await caseWorkflowDraftBloc.close();
+    await kbliBloc.close();
 
     await _database.close();
   }

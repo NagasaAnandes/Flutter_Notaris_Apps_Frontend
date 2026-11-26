@@ -22,50 +22,61 @@ void main() {
 
     final database = await appDatabase.database;
 
-    final dataSource = KbliLocalDataSourceImpl(database);
+    final dataSource = KbliLocalDataSourceImpl(appDatabase);
 
     repository = KbliRepositoryImpl(dataSource);
 
-    await database.insert('kbli_2020', {
+    await database.insert('kbli_catalog', {
       'id': 'kbli-2020-001',
-      'kode': '01111',
-      'judul_id': 'Pertanian Jagung',
-      'uraian_id': 'Kegiatan pertanian jagung',
-      'judul_en': 'Corn Farming',
-      'uraian_en': 'Corn farming activities',
       'version': '2020',
+      'code': '01111',
+      'title_id': 'Pertanian Jagung',
+      'description_id': 'Kegiatan pertanian jagung',
+      'title_en': 'Corn Farming',
+      'description_en': 'Corn farming activities',
       'id_version': 'test-version-2020',
       'id_kategori': 'A',
       'created_at': '2026-01-01T00:00:00.000Z',
+      'updated_at': '2026-01-01T00:00:00.000Z',
       'tags': 'jagung, pertanian',
     });
 
-    await database.insert('kbli_2020', {
+    await database.insert('kbli_catalog', {
       'id': 'kbli-2020-002',
-      'kode': '01112',
-      'judul_id': 'Pertanian Kedelai',
-      'uraian_id': 'Kegiatan pertanian kedelai',
-      'judul_en': 'Soybean Farming',
-      'uraian_en': 'Soybean farming activities',
       'version': '2020',
+      'code': '01112',
+      'title_id': 'Pertanian Kedelai',
+      'description_id': 'Kegiatan pertanian kedelai',
+      'title_en': 'Soybean Farming',
+      'description_en': 'Soybean farming activities',
       'id_version': 'test-version-2020',
       'id_kategori': 'A',
       'created_at': '2026-01-01T00:00:00.000Z',
+      'updated_at': '2026-01-01T00:00:00.000Z',
       'tags': 'kedelai, pertanian',
     });
 
-    await database.insert('kbli_2025', {
+    await database.insert('kbli_catalog', {
       'id': 'kbli-2025-001',
-      'kode': '01111',
-      'judul_id': 'Pertanian Jagung 2025',
-      'uraian_id': 'Kegiatan pertanian jagung versi 2025',
-      'judul_en': 'Corn Farming 2025',
-      'uraian_en': 'Corn farming activities version 2025',
       'version': '2025',
+      'code': '01111',
+      'title_id': 'Pertanian Jagung 2025',
+      'description_id': 'Kegiatan pertanian jagung versi 2025',
+      'title_en': 'Corn Farming 2025',
+      'description_en': 'Corn farming activities version 2025',
       'id_version': 'test-version-2025',
       'id_kategori': 'A',
       'created_at': '2026-01-01T00:00:00.000Z',
+      'updated_at': '2026-01-01T00:00:00.000Z',
       'tags': 'jagung, pertanian',
+    });
+
+    await database.insert('kbli_catalog_sources', {
+      'id': 'source-test-legacy-2020-001',
+      'catalog_id': 'kbli-2020-001',
+      'source_type': 'local_2020',
+      'source_record_id': 'legacy-kbli-2020-001',
+      'imported_at': '2026-01-01T00:00:00.000Z',
     });
 
     await database.insert('kbli_conversion', {
@@ -136,6 +147,19 @@ void main() {
     );
 
     expect(result, isNull);
+  });
+
+  test('getById resolves legacy source record ID to catalog', () async {
+    final result = await repository.getById(
+      version: KbliVersion.kbli2020,
+      id: 'legacy-kbli-2020-001',
+    );
+
+    expect(result, isNotNull);
+    expect(result!.id, 'kbli-2020-001');
+    expect(result.code, '01111');
+    expect(result.titleId, 'Pertanian Jagung');
+    expect(result.version, KbliVersion.kbli2020);
   });
 
   test('getByCode returns KBLI from the requested version', () async {
