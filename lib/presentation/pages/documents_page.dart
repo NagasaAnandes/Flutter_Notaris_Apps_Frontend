@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 class DocumentsPage extends StatelessWidget {
-  const new({super.key});
+  const DocumentsPage({super.key});
 
   @override
   Widget build(BuildContext context) {

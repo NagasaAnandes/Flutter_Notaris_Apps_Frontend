@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 class AktaPage extends StatelessWidget {
-  const new({super.key});
+  const AktaPage({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 class KbliPage extends StatelessWidget {
-  const new({super.key});
+  const KbliPage({super.key});
 
   @override
   Widget build(BuildContext context) {
